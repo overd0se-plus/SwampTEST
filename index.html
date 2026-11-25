@@ -1243,7 +1243,7 @@ function buildSwampDecor() {
         const dist = 6.2 + Math.random() * 16;
         const x = Math.cos(angle) * dist;
         const z = Math.sin(angle) * dist;
-        if (OBSTACLES.some(o => Math.hypot(o.x - x, o.z - z) < 2.4)) continue;
+        if (OBSTACLES.some(o => Math.hypot(o.x - x, o.z - z) < 3.0)) continue;
         const h = 2.2 + Math.random() * 2.2;
         const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16 + Math.random() * 0.1, 0.26, h, 6), trunkMat);
         trunk.position.set(x, h / 2, z);
@@ -1456,12 +1456,20 @@ function buildEnvironment() {
     buildSawmill();
 
     const rockMat = new THREE.MeshStandardMaterial({ color: 0x27332d, flatShading: true });
-    for (let i = 0; i < 25; i++) {
+    // Между любыми двумя препятствиями остаётся проход шире босса (≈1.9), иначе зомби застревают
+    const MIN_OBSTACLE_GAP = 2.1;
+    let rocksPlaced = 0, rockAttempts = 0;
+    while (rocksPlaced < 25 && rockAttempts < 800) {
+        rockAttempts++;
         const angle = Math.random() * Math.PI * 2;
         const dist = 7.5 + Math.random() * 17;
         const rockSize = 0.4 + Math.random() * 0.7;
+        const rx = Math.cos(angle) * dist;
+        const rz = Math.sin(angle) * dist;
+        if (OBSTACLES.some(o => Math.hypot(o.x - rx, o.z - rz) < o.r + rockSize * 0.8 + MIN_OBSTACLE_GAP)) continue;
+        rocksPlaced++;
         const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(rockSize, 0), rockMat);
-        rock.position.set(Math.cos(angle) * dist, 0.2, Math.sin(angle) * dist);
+        rock.position.set(rx, 0.2, rz);
         rock.rotation.set(Math.random(), Math.random(), Math.random());
         rock.castShadow = true;
         scene.add(rock);
@@ -2376,6 +2384,74 @@ function playShotgunBlast() {
 // ==========================================
 let lastTime = performance.now();
 
+// Куда идёт зомби: к центру, но с обходом препятствий.
+// Если за ~0.6 с он почти не приблизился к центру, он считается застрявшим и некоторое время идёт в сторону.
+function getZombieMoveDir(z, dt) {
+    const px = z.mesh.position.x, pz = z.mesh.position.z;
+    const len = Math.hypot(px, pz) || 1;
+    let bx = -px / len, bz = -pz / len;
+    const bodyR = z.bodyR || 0.32;
+
+    if (z.side === undefined) z.side = Math.random() < 0.5 ? 1 : -1;
+    if (z.detourT === undefined) z.detourT = 0;
+
+    // Последняя страховка: если зомби идёт вдвое дольше, чем должен, он дальше идёт напрямик сквозь препятствия
+    z.age = (z.age || 0) + dt;
+    if (z.timeLimit === undefined) z.timeLimit = Math.max(0, len - 5) / z.speed * 2 + 10;
+    if (z.age > z.timeLimit) z.ghostT = 999;
+
+    // Проверка на застревание
+    z.stuckT = (z.stuckT || 0) + dt;
+    if (z.stuckT >= 0.6) {
+        if (z.lastR !== undefined && z.detourT <= 0) {
+            const progress = z.lastR - len;
+            if (progress < z.speed * z.stuckT * 0.25) {
+                z.side = -z.side;
+                z.detourT = 1.3;
+                z.stuckCount = (z.stuckCount || 0) + 1;
+                // Страховка: если застревает снова и снова, на пару секунд проходит сквозь препятствия
+                if (z.stuckCount >= 3) { z.ghostT = Math.max(2.5, 2.5 / z.speed); z.stuckCount = 0; }
+            } else {
+                z.stuckCount = 0;
+            }
+        }
+        z.lastR = len;
+        z.stuckT = 0;
+    }
+    if (z.ghostT > 0) {
+        z.ghostT -= dt;
+        return { x: bx, z: bz };
+    }
+    if (z.detourT > 0) {
+        z.detourT -= dt;
+        const a = 1.3 * z.side;
+        const c = Math.cos(a), s = Math.sin(a);
+        const nx = bx * c - bz * s;
+        const nz = bx * s + bz * c;
+        bx = nx; bz = nz;
+    }
+
+    // Плавный обход: отталкиваемся вбок от препятствий впереди
+    let sx = 0, sz = 0;
+    const perpX = -bz, perpZ = bx;
+    for (let k = 0; k < OBSTACLES.length; k++) {
+        const ob = OBSTACLES[k];
+        const rx = ob.x - px, rz = ob.z - pz;
+        const d = Math.hypot(rx, rz);
+        const reach = ob.r + bodyR + 1.1;
+        if (d >= reach || d < 0.001) continue;
+        if ((rx * bx + rz * bz) / d < 0.1) continue;
+        const cross = bx * rz - bz * rx;
+        const sgn = Math.abs(cross) < 0.05 ? z.side : (cross > 0 ? -1 : 1);
+        const w = (reach - d) / reach * 2.0;
+        sx += perpX * sgn * w;
+        sz += perpZ * sgn * w;
+    }
+    let mx = bx + sx, mz = bz + sz;
+    const ml = Math.hypot(mx, mz) || 1;
+    return { x: mx / ml, z: mz / ml };
+}
+
 function animate(now) {
     requestAnimationFrame(animate);
     const dt = Math.min(0.05, (now - lastTime) / 1000);
@@ -2460,18 +2536,21 @@ function animate(now) {
         const atFenceZ = Math.abs(z.mesh.position.z) <= fenceStop;
 
         if (!(atFenceX && atFenceZ)) {
-            dir.normalize();
-            z.mesh.position.addScaledVector(dir, z.speed * dt);
-            for (let k = 0; k < OBSTACLES.length; k++) {
-                const ob = OBSTACLES[k];
-                const dx = z.mesh.position.x - ob.x;
-                const dz = z.mesh.position.z - ob.z;
-                const d = Math.hypot(dx, dz);
-                const minD = ob.r + (z.bodyR || 0.32);
-                if (d < minD && d > 0.001) {
-                    const push = (minD - d) / d;
-                    z.mesh.position.x += dx * push;
-                    z.mesh.position.z += dz * push;
+            const mv = getZombieMoveDir(z, dt);
+            z.mesh.position.x += mv.x * z.speed * dt;
+            z.mesh.position.z += mv.z * z.speed * dt;
+            for (let pass = 0; pass < 2 && !(z.ghostT > 0); pass++) {
+                for (let k = 0; k < OBSTACLES.length; k++) {
+                    const ob = OBSTACLES[k];
+                    const dx = z.mesh.position.x - ob.x;
+                    const dz = z.mesh.position.z - ob.z;
+                    const d = Math.hypot(dx, dz);
+                    const minD = ob.r + (z.bodyR || 0.32);
+                    if (d < minD && d > 0.001) {
+                        const push = (minD - d) / d;
+                        z.mesh.position.x += dx * push;
+                        z.mesh.position.z += dz * push;
+                    }
                 }
             }
         } else {
@@ -2799,27 +2878,40 @@ requestAnimationFrame(animate);
         <button id="btn-close-whatsnew" class="absolute top-2 right-3 text-[#7d957f] hover:text-white text-xl leading-none cursor-pointer">✕</button>
         <h2 class="font-military text-lg text-amber-300 mb-3">📋 ЧТО НОВОГО</h2>
         <div class="text-xs text-[#c9d8ce] font-tactical space-y-2 leading-relaxed">
+            <p class="font-military text-amber-300 mb-1">PILOT 1.4</p>
+            <ul class="list-disc pl-4 space-y-1">
+                <li>Новое оружие: Desert Eagle. Бьёт сильнее USP-S, но стреляет медленнее и слабее MP5-SD.</li>
+                <li>Витрина цен: в меню бойца есть кнопка со списком всего оружия, его ценами и суммой, которой ещё не хватает.</li>
+                <li>Каждую 10-ю волну в конце приходит босс: огромный медленный зелёно-оранжевый зомби. За победу над ним большая награда.</li>
+                <li>Исправлены тени: теперь их отбрасывают все бойцы, зомби и постройки.</li>
+                <li>Исправлен баг: зомби больше не застревают между камнями и деревьями.</li>
+                <li>Список оружия при найме идёт по возрастанию цены и показывает скорострельность.</li>
+            </ul>
             <p class="font-military text-amber-300 mb-1">PILOT 1.3.1</p>
             <ul class="list-disc pl-4 space-y-1">
-                <li>Ребаланс экономики: награда за зомби растёт вместе с волной (3-4 на первой, далее 15/20/30/50/75/100, потом x1.32 за волну). Бегуны и жирдяи приносят x3 от награды обычного. Бонус за зачистку волны тоже масштабируется. Здоровье зомби теперь растёт x1.38 за волну — сложность догоняет доход.</li>
-                <li>Оружие: базовый урон AWP повышен до 1000, XM-1014 — до 80 за дробину (320 за залп в упор).</li>
+                <li>Ребаланс экономики: награда за зомби и бонус за волну растут вместе с номером волны, зомби становятся живучее.</li>
+                <li>Урон AWP повышен до 1000, урон XM-1014 до 80 за дробину.</li>
             </ul>
             <p class="font-military text-amber-300 mb-1">PILOT 1.3</p>
             <ul class="list-disc pl-4 space-y-1">
-                <li>Внесенные изменения: добавлена функция масштабирования камеры. Исправлены ошибки. Добавлена возможность смены взаимного расположения бойцов (удерживайте бойца, затем переместите в другое доступное место). Добавлена полоса окончания волны. Внесены изменения в систему покупки бойцов. Снижены цены на улучшения бойцов.</li>
-                <li>Новое оружие: XM-1014 — дробовик со залпом из 4 дробин узким треугольником.</li>
-                <li>Оружия получили детальные модели и вспышки у дула.</li>
-                <li>Каждое улучшение оружия добавляет +0.05 к скорострельности (зелёное превью в кнопке УЛУЧШИТЬ).</li>
-                <li>На карте появились деревья, трава и лужи. Зомби больше не проходят сквозь камни и деревья.</li>
-                <li>Возле палатки появилась лесопилка: улучшайте её, чтобы укреплять забор — прочность растёт с 100% до 150%, 200% и дальше. При улучшении забор полностью восстанавливается.</li>
+                <li>Новое оружие: XM-1014, дробовик, который стреляет четырьмя дробинами.</li>
+                <li>Камеру можно приближать и отдалять.</li>
+                <li>Бойцов можно переставлять: зажми бойца и перетащи на другую точку.</li>
+                <li>Добавлена полоса конца волны.</li>
+                <li>Улучшения бойцов стали дешевле, изменена система покупки.</li>
+                <li>Каждое улучшение оружия даёт +0.05 к скорострельности.</li>
+                <li>У оружия появились детальные модели и вспышки выстрела.</li>
+                <li>На карте появились деревья, трава и лужи. Зомби обходят камни и деревья.</li>
+                <li>Возле палатки появилась лесопилка. Её улучшение укрепляет забор: прочность растёт со 100% до 150%, 200% и дальше.</li>
+                <li>Исправлены ошибки.</li>
             </ul>
         </div>
-        <div id="whatsnew-version" class="mt-4 text-[10px] text-white/40 font-military">PILOT 1.3</div>
+        <div id="whatsnew-version" class="mt-4 text-[10px] text-white/40 font-military">PILOT 1.4</div>
     </div>
 </div>
 
 <script>
-const GAME_VERSION = "PILOT 1.3";
+const GAME_VERSION = "PILOT 1.4";
 (function() {
     const vEl = document.getElementById('whatsnew-version');
     if (vEl) vEl.textContent = GAME_VERSION;
