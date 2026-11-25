@@ -178,7 +178,7 @@
                     ВОЙТИ
                 </button>
                 <button type="button" id="tab-auth-register" class="py-1.5 rounded-lg font-military text-[11px] text-[#7f9689] hover:text-[#c7d6cd] transition cursor-pointer">
-                    НОВЫЙ НИК
+                    РЕГИСТРАЦИЯ
                 </button>
             </div>
 
@@ -3141,7 +3141,7 @@ window.addEventListener('resize', () => {
         } else {
             tabRegister.className = 'py-1.5 rounded-lg font-military text-[11px] bg-[#365745] text-[#eef7f2] transition cursor-pointer';
             tabLogin.className = 'py-1.5 rounded-lg font-military text-[11px] text-[#7f9689] hover:text-[#c7d6cd] transition cursor-pointer';
-            subtitle.textContent = 'Придумай ник и пароль для своего позывного';
+            subtitle.textContent = 'Придумай ник и пароль';
             submitBtn.textContent = 'СОЗДАТЬ И ВОЙТИ';
             passInput.setAttribute('autocomplete', 'new-password');
         }
@@ -3181,7 +3181,7 @@ window.addEventListener('resize', () => {
 
             if (authMode === 'login') {
                 if (!existing) {
-                    statusEl.textContent = 'Такого ника пока нет — нажми «НОВЫЙ НИК»';
+                    statusEl.textContent = 'Такого ника пока нет — нажми «РЕГИСТРАЦИЯ»';
                     return;
                 }
                 const parts = String(existing.password_hash || '').split(':');
