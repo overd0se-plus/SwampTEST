@@ -1285,15 +1285,15 @@ function buildSwampDecor() {
     }
 }
 
-// Лесопилка возле палатки с понятной подсветкой кликабельности
+// Циркулярная пила возле палатки (стол-верстак, металлический диск с зубьями, привод и брёвна)
 function buildSawmill() {
     const sawX = 1.95;
     const sawZ = -0.2;
 
-    // Подсветка площадки лесопилки на полу
+    // Подсветка площадки циркулярки на полу
     const groundPad = new THREE.Mesh(
-        new THREE.BoxGeometry(1.1, 0.06, 1.55),
-        new THREE.MeshStandardMaterial({ color: 0x334237, roughness: 0.8, flatShading: true })
+        new THREE.BoxGeometry(1.15, 0.06, 1.6),
+        new THREE.MeshStandardMaterial({ color: 0x2e3b34, roughness: 0.85, flatShading: true })
     );
     groundPad.position.set(sawX, 0.16, sawZ);
     groundPad.receiveShadow = true;
@@ -1306,7 +1306,7 @@ function buildSawmill() {
         opacity: 0.85,
         side: THREE.DoubleSide
     });
-    const ringMesh = new THREE.Mesh(new THREE.RingGeometry(0.72, 0.86, 24), ringMat);
+    const ringMesh = new THREE.Mesh(new THREE.RingGeometry(0.74, 0.88, 24), ringMat);
     ringMesh.rotation.x = -Math.PI / 2;
     ringMesh.scale.set(0.85, 1.15, 1);
     ringMesh.position.set(sawX, 0.2, sawZ);
@@ -1315,83 +1315,132 @@ function buildSawmill() {
     state.sawmillRingMat = ringMat;
 
     const grp = new THREE.Group();
-    const woodMat = new THREE.MeshStandardMaterial({ color: 0x6b5035, roughness: 0.85, flatShading: true });
-    const trimMat = new THREE.MeshStandardMaterial({ color: 0x8c6842, roughness: 0.75, flatShading: true });
-    const sawRoofMat = new THREE.MeshStandardMaterial({ color: 0x3d5238, roughness: 0.85, flatShading: true });
+    const steelMat = new THREE.MeshStandardMaterial({ color: 0x3b4742, metalness: 0.55, roughness: 0.45, flatShading: true });
+    const darkMetalMat = new THREE.MeshStandardMaterial({ color: 0x202724, metalness: 0.65, roughness: 0.4, flatShading: true });
+    const woodTableMat = new THREE.MeshStandardMaterial({ color: 0x6e5136, roughness: 0.85, flatShading: true });
+    const motorMat = new THREE.MeshStandardMaterial({ color: 0x8a5428, metalness: 0.35, roughness: 0.55, flatShading: true });
 
-    const base = new THREE.Mesh(new THREE.BoxGeometry(1.65, 0.52, 1.25), woodMat);
-    base.position.y = 0.26;
-    base.castShadow = true;
-    grp.add(base);
-
-    // Опорные столбы и тёплый фонарь лесопилки
-    const postGeo = new THREE.BoxGeometry(0.12, 0.65, 0.12);
-    [[-0.72, 0.55], [0.72, 0.55], [-0.72, -0.55], [0.72, -0.55]].forEach(([px, pz]) => {
-        const post = new THREE.Mesh(postGeo, trimMat);
-        post.position.set(px, 0.52, pz);
-        post.castShadow = true;
-        grp.add(post);
+    // Ножки и рама верстака циркулярной пилы
+    const legGeo = new THREE.BoxGeometry(0.14, 0.66, 0.14);
+    [[-0.74, 0.48], [0.74, 0.48], [-0.74, -0.48], [0.74, -0.48]].forEach(([lx, lz]) => {
+        const leg = new THREE.Mesh(legGeo, darkMetalMat);
+        leg.position.set(lx, 0.33, lz);
+        leg.castShadow = true;
+        grp.add(leg);
     });
 
-    const sawRoofGeo = new THREE.CylinderGeometry(1.02, 1.02, 1.78, 3);
-    sawRoofGeo.rotateX(-Math.PI / 2);
-    const sawRoof = new THREE.Mesh(sawRoofGeo, sawRoofMat);
-    sawRoof.position.y = 0.84;
-    sawRoof.scale.set(1, 0.55, 1);
-    sawRoof.castShadow = true;
-    grp.add(sawRoof);
+    // Нижняя поперечная стяжка
+    const brace1 = new THREE.Mesh(new THREE.BoxGeometry(1.56, 0.08, 0.1), darkMetalMat);
+    brace1.position.set(0, 0.22, 0.48);
+    const brace2 = new THREE.Mesh(new THREE.BoxGeometry(1.56, 0.08, 0.1), darkMetalMat);
+    brace2.position.set(0, 0.22, -0.48);
+    grp.add(brace1, brace2);
 
-    // Пильный диск
-    const blade = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.32, 0.32, 0.05, 18),
-        new THREE.MeshStandardMaterial({ color: 0xb0bec5, metalness: 0.85, roughness: 0.25, emissive: 0x1d2923 })
+    // Столешница из двух половинок с прорезью посередине под диск
+    const tableHalf1 = new THREE.Mesh(new THREE.BoxGeometry(1.75, 0.1, 0.5), woodTableMat);
+    tableHalf1.position.set(0, 0.68, 0.32);
+    tableHalf1.castShadow = true;
+    const tableHalf2 = new THREE.Mesh(new THREE.BoxGeometry(1.75, 0.1, 0.5), woodTableMat);
+    tableHalf2.position.set(0, 0.68, -0.32);
+    tableHalf2.castShadow = true;
+    grp.add(tableHalf1, tableHalf2);
+
+    // Стальная направляющая линейка вдоль стола
+    const guideRail = new THREE.Mesh(new THREE.BoxGeometry(1.68, 0.09, 0.07), steelMat);
+    guideRail.position.set(0, 0.77, -0.22);
+    guideRail.castShadow = true;
+    grp.add(guideRail);
+
+    // Электромотор / привод сбоку под столом
+    const motor = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.42, 10), motorMat);
+    motor.rotation.z = Math.PI / 2;
+    motor.position.set(-0.48, 0.44, 0);
+    motor.castShadow = true;
+    grp.add(motor);
+
+    // Защитный кожух-дуга над задней частью диска
+    const guard = new THREE.Mesh(
+        new THREE.TorusGeometry(0.48, 0.035, 6, 14, Math.PI * 0.72),
+        new THREE.MeshStandardMaterial({ color: 0xb87333, metalness: 0.5, roughness: 0.4, flatShading: true })
     );
-    blade.position.set(0, 0.62, 0.64);
-    blade.rotation.z = Math.PI / 2;
-    grp.add(blade);
-    state.sawmillBladeMesh = blade;
+    guard.position.set(0.05, 0.76, 0);
+    guard.rotation.z = 0.25;
+    grp.add(guard);
 
-    // Тёплый фонарь над входом в лесопилку
-    const lamp = new THREE.Mesh(
-        new THREE.BoxGeometry(0.16, 0.16, 0.16),
-        new THREE.MeshBasicMaterial({ color: 0xffca6b })
-    );
-    lamp.position.set(0, 1.08, 0.72);
-    grp.add(lamp);
+    // Большой вращающийся диск циркулярной пилы с зубьями
+    const bladeGroup = new THREE.Group();
+    bladeGroup.position.set(0.05, 0.76, 0);
 
-    // Штабель брёвен + дополнительные брёвна при прокачке
-    const logMat = new THREE.MeshStandardMaterial({ color: 0x7d5c3b, roughness: 0.9, flatShading: true });
+    const discMat = new THREE.MeshStandardMaterial({
+        color: 0xd0dce0,
+        metalness: 0.88,
+        roughness: 0.2,
+        emissive: 0x1a2620
+    });
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.44, 0.03, 24), discMat);
+    disc.rotation.x = Math.PI / 2;
+    disc.castShadow = true;
+    bladeGroup.add(disc);
+
+    // Центральная гайка и фланец диска
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.06, 12), darkMetalMat);
+    hub.rotation.x = Math.PI / 2;
+    bladeGroup.add(hub);
+
+    // 16 зубьев по окружности диска
+    const toothGeo = new THREE.ConeGeometry(0.045, 0.1, 4);
+    const toothCount = 16;
+    for (let i = 0; i < toothCount; i++) {
+        const ang = (i / toothCount) * Math.PI * 2;
+        const tooth = new THREE.Mesh(toothGeo, discMat);
+        tooth.position.set(Math.cos(ang) * 0.45, Math.sin(ang) * 0.45, 0);
+        tooth.rotation.z = ang - Math.PI / 2 - 0.25;
+        bladeGroup.add(tooth);
+    }
+
+    grp.add(bladeGroup);
+    state.sawmillBladeMesh = bladeGroup;
+
+    // Свежераспиленное бревно на столе и дополнительные брёвна при прокачке
+    const logMat = new THREE.MeshStandardMaterial({ color: 0x85613d, roughness: 0.9, flatShading: true });
+    const cutCoreMat = new THREE.MeshStandardMaterial({ color: 0xc29b68, roughness: 0.85, flatShading: true });
     state.sawmillExtraLogs = [];
     for (let i = 0; i < 6; i++) {
-        const log = new THREE.Mesh(new THREE.CylinderGeometry(0.095, 0.095, 1.15, 8), logMat);
+        const log = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 1.1, 8), logMat);
         log.rotation.z = Math.PI / 2;
-        const isBaseLog = i < 3;
-        log.position.set(-0.95, 0.12 + Math.floor(i / 3) * 0.2, -0.35 + (i % 3) * 0.22);
-        log.castShadow = true;
-        if (!isBaseLog) {
+        // Половинка бревна сразу лежит на столе у пилы, остальные появляются сбоку при улучшении
+        if (i === 0) {
+            log.position.set(-0.35, 0.81, 0.24);
+            const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.082, 0.082, 0.02, 8), cutCoreMat);
+            tip.position.y = 0.55;
+            log.add(tip);
+        } else {
+            const idxSide = i - 1;
+            log.position.set(-0.15, 0.11 + Math.floor(idxSide / 3) * 0.17, 0.72 + (idxSide % 3) * 0.17);
             log.visible = false;
             state.sawmillExtraLogs.push(log);
         }
+        log.castShadow = true;
         grp.add(log);
     }
 
-    grp.scale.setScalar(0.62);
-    grp.position.set(sawX, 0.18, sawZ);
+    grp.scale.setScalar(0.68);
+    grp.position.set(sawX, 0.16, sawZ);
     grp.rotation.y = Math.PI / 2;
     scene.add(grp);
     state.sawmillMesh = grp;
 
-    // Плавающий маркер-указатель над лесопилкой
+    // Плавающий маркер-указатель над циркуляркой
     const badgeGroup = new THREE.Group();
-    badgeGroup.position.set(sawX, 1.48, sawZ);
+    badgeGroup.position.set(sawX, 1.38, sawZ);
     const pill = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.24, 0.24, 0.08, 16),
+        new THREE.CylinderGeometry(0.22, 0.22, 0.08, 16),
         new THREE.MeshBasicMaterial({ color: 0xfbbf24 })
     );
     pill.rotation.x = Math.PI / 2;
     badgeGroup.add(pill);
     const core = new THREE.Mesh(
-        new THREE.BoxGeometry(0.18, 0.18, 0.12),
+        new THREE.BoxGeometry(0.16, 0.16, 0.12),
         new THREE.MeshBasicMaterial({ color: 0x1b261f })
     );
     core.position.z = 0.02;
@@ -1399,8 +1448,8 @@ function buildSawmill() {
     scene.add(badgeGroup);
     state.sawmillBadgeGroup = badgeGroup;
 
-    const hitMesh = new THREE.Mesh(new THREE.BoxGeometry(1.45, 1.55, 1.15), new THREE.MeshBasicMaterial({ visible: false }));
-    hitMesh.position.set(sawX, 0.72, sawZ);
+    const hitMesh = new THREE.Mesh(new THREE.BoxGeometry(1.55, 1.45, 1.25), new THREE.MeshBasicMaterial({ visible: false }));
+    hitMesh.position.set(sawX, 0.68, sawZ);
     hitMesh.rotation.y = Math.PI / 2;
     scene.add(hitMesh);
     state.sawmillHitMesh = hitMesh;
@@ -2475,7 +2524,7 @@ function animate(now) {
     const hoverBoost = sawmillHovered ? 0.08 : 0;
 
     if (state.sawmillMesh) {
-        const baseScale = 0.62 + clickBoost + hoverBoost;
+        const baseScale = 0.68 + clickBoost + hoverBoost;
         state.sawmillMesh.scale.setScalar(baseScale);
     }
     if (state.sawmillRingMesh && state.sawmillRingMat) {
@@ -2484,11 +2533,12 @@ function animate(now) {
         state.sawmillRingMat.opacity = sawmillHovered ? 1.0 : (0.55 + sawWave * 0.35);
     }
     if (state.sawmillBadgeGroup) {
-        state.sawmillBadgeGroup.position.y = 1.48 + Math.sin(now * 0.004) * 0.08;
+        state.sawmillBadgeGroup.position.y = 1.38 + Math.sin(now * 0.004) * 0.08;
         state.sawmillBadgeGroup.lookAt(camera.position);
     }
-    if (state.sawmillBladeMesh && state.sawmillLevel > 0) {
-        state.sawmillBladeMesh.rotation.y += dt * (1.8 + state.sawmillLevel * 0.6);
+    if (state.sawmillBladeMesh) {
+        const spinSpeed = state.sawmillLevel > 0 ? (4.5 + state.sawmillLevel * 1.4) : 0.8;
+        state.sawmillBladeMesh.rotation.z -= dt * spinSpeed;
     }
 
     if (!state.started) {
