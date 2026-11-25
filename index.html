@@ -123,6 +123,10 @@
                     <span data-i18n="langLabel">ЯЗЫК</span>
                     <span id="lang-code" class="text-amber-400">RU</span>
                 </button>
+                <button id="btn-account-switch" class="w-full px-3 py-2 rounded-lg bg-[#18261f] hover:bg-[#22362c] border border-[#2d4237] text-[#d6dfd9] text-xs font-military flex justify-between items-center transition cursor-pointer">
+                    <span id="account-menu-label">АККАУНТ</span>
+                    <span id="account-menu-nick" class="text-emerald-400 truncate max-w-[78px]">—</span>
+                </button>
                 <button id="btn-open-wipe" class="hidden w-full px-3 py-2 rounded-lg bg-[#2b1616] hover:bg-[#422020] border border-[#5e2c2c] text-red-300 text-xs font-military flex justify-between items-center transition cursor-pointer">
                     <span data-i18n="resetBtn">СБРОС</span>
                     <span>🔄</span>
@@ -132,7 +136,7 @@
     </div>
 
     <!-- ГЛАВНОЕ МЕНЮ -->
-    <div id="main-menu" class="absolute inset-0 bg-gradient-to-b from-[#0d1411]/85 via-[#131d18]/75 to-[#0a100d]/95 flex flex-col justify-between items-center p-8 z-30 backdrop-blur-[2px]">
+    <div id="main-menu" class="hidden absolute inset-0 bg-gradient-to-b from-[#0d1411]/85 via-[#131d18]/75 to-[#0a100d]/95 flex flex-col justify-between items-center p-8 z-30 backdrop-blur-[2px]">
         <div class="mt-16 text-center">
             <div class="inline-block px-3.5 py-1 mb-3 rounded-full bg-[#1e2c25] border border-[#384f43] text-[11px] tracking-widest text-[#8ba697] uppercase font-bold">
                 Tactical Outpost TD
@@ -150,6 +154,62 @@
             <button id="btn-start" class="w-4/5 py-4 bg-gradient-to-r from-[#365745] to-[#48705a] hover:from-[#436954] hover:to-[#56856a] active:scale-95 text-[#eff7f2] font-military text-lg tracking-widest rounded-xl border border-[#65967b]/50 shadow-[0_8px_25px_rgba(24,41,32,0.85)] transition cursor-pointer uppercase">
                 <span data-i18n="start">НАЧАТЬ</span>
             </button>
+        </div>
+    </div>
+
+    <!-- АККУРАТНЫЙ ЭКРАН ВХОДА / СОЗДАНИЯ ПОЗЫВНОГО (ПОВЕРХ 3D СЦЕНЫ) -->
+    <div id="auth-screen" class="absolute inset-0 bg-gradient-to-b from-[#0b110e]/75 via-[#101814]/70 to-[#090e0c]/90 flex flex-col justify-center items-center p-6 z-30 backdrop-blur-[2px]">
+        <div class="w-full max-w-[330px] bg-[#111915]/92 border border-[#364d41] rounded-2xl p-5 shadow-[0_14px_40px_rgba(0,0,0,0.9)] backdrop-blur-md">
+            <div class="text-center mb-4">
+                <div class="inline-block px-3 py-0.5 mb-2 rounded-full bg-[#19241e] border border-[#2f453a] text-[10px] tracking-widest text-[#88a394] uppercase font-bold">
+                    Perimeter Access
+                </div>
+                <h1 class="font-military text-2xl tracking-wider text-[#e2ece6] leading-tight">
+                    SWAMP <span class="text-[#69967c]">DOSE</span>
+                </h1>
+                <p id="auth-subtitle" class="mt-1 text-[11px] text-[#8fa89a]">
+                    Войди под своим ником, чтобы сохранить прогресс
+                </p>
+            </div>
+
+            <!-- Переключатель Вход / Новый ник -->
+            <div class="grid grid-cols-2 gap-1.5 bg-[#0c120f] p-1 rounded-xl border border-[#24332b] mb-3.5">
+                <button type="button" id="tab-auth-login" class="py-1.5 rounded-lg font-military text-[11px] bg-[#365745] text-[#eef7f2] transition cursor-pointer">
+                    ВОЙТИ
+                </button>
+                <button type="button" id="tab-auth-register" class="py-1.5 rounded-lg font-military text-[11px] text-[#7f9689] hover:text-[#c7d6cd] transition cursor-pointer">
+                    НОВЫЙ НИК
+                </button>
+            </div>
+
+            <form id="auth-form" class="flex flex-col gap-2.5">
+                <div>
+                    <label class="block text-[10px] uppercase tracking-wider text-[#7d9688] font-bold mb-1">
+                        Никнейм
+                    </label>
+                    <input id="auth-username" type="text" maxlength="20" autocomplete="username" placeholder="например, max_swamp"
+                        class="w-full px-3 py-2 rounded-xl bg-[#0c1310] border border-[#2a3d33] focus:border-[#69967c] focus:outline-none text-xs text-[#e5efe9] placeholder-[#4a5e53] font-semibold">
+                </div>
+                <div>
+                    <label class="block text-[10px] uppercase tracking-wider text-[#7d9688] font-bold mb-1">
+                        Пароль
+                    </label>
+                    <input id="auth-password" type="password" maxlength="48" autocomplete="current-password" placeholder="••••••••"
+                        class="w-full px-3 py-2 rounded-xl bg-[#0c1310] border border-[#2a3d33] focus:border-[#69967c] focus:outline-none text-xs text-[#e5efe9] placeholder-[#4a5e53] font-semibold">
+                </div>
+
+                <div id="auth-status" class="min-h-[16px] text-[11px] text-amber-400/95 font-medium text-center leading-snug"></div>
+
+                <button type="submit" id="btn-auth-submit" class="w-full py-3 mt-0.5 bg-gradient-to-r from-[#365745] to-[#48705a] hover:from-[#436954] hover:to-[#56856a] active:scale-[0.99] text-[#eff7f2] font-military text-xs tracking-wider rounded-xl border border-[#65967b]/50 shadow-lg transition cursor-pointer uppercase">
+                    ВОЙТИ В ЛАГЕРЬ
+                </button>
+            </form>
+
+            <div class="mt-3 pt-2.5 border-t border-[#202e27] flex justify-center">
+                <button type="button" id="btn-guest-play" class="text-[11px] text-[#7c9487] hover:text-[#b8cfc2] transition cursor-pointer">
+                    Играть без аккаунта →
+                </button>
+            </div>
         </div>
     </div>
 
@@ -882,62 +942,199 @@ function refreshSawmillVisuals() {
     }
 }
 
+const SUPABASE_URL = 'https://cogrcgadelzevimylfys.supabase.co';
+const SUPABASE_KEY = 'Sb_publishable_6ELNCJRv8x4AoAlzMi6wnQ_BO0N11Yv';
+const SESSION_KEY = 'swamp_perimeter_session_v1';
+
+let currentAccount = null; // { id, username }
+let cloudSyncTimer = null;
+
+function serializeProgressData() {
+    return {
+        wave: state.wave,
+        scrap: state.scrap,
+        sawmillLevel: state.sawmillLevel,
+        slots: state.slots.map(s => ({
+            unlocked: s.unlocked,
+            typeId: s.unitType ? s.unitType.typeId : null,
+            level: s.level,
+            totalSpent: s.totalSpent
+        }))
+    };
+}
+
+function applyProgressData(data) {
+    if (!data || typeof data !== 'object') return;
+    if (typeof data.wave === 'number') state.wave = Math.max(1, data.wave);
+    if (typeof data.scrap === 'number') state.scrap = Math.max(0, data.scrap);
+    if (typeof data.sawmillLevel === 'number') state.sawmillLevel = Math.max(0, data.sawmillLevel);
+    applySawmillToFence();
+    refreshSawmillVisuals();
+
+    if (Array.isArray(data.slots)) {
+        data.slots.forEach((savedSlot, idx) => {
+            const slot = state.slots[idx];
+            if (!slot) return;
+            if (slot.unitGroup) {
+                slot.padMesh.remove(slot.unitGroup);
+                slot.unitGroup = null;
+            }
+            slot.unitType = null;
+            slot.level = 0;
+            slot.totalSpent = 0;
+
+            slot.unlocked = idx < 2 || savedSlot.unlocked === true;
+            if (slot.plusGroup) {
+                slot.plusGroup.visible = !slot.unlocked;
+            }
+            if (savedSlot.typeId !== null && WEAPON_TYPES[savedSlot.typeId]) {
+                slot.unlocked = true;
+                if (slot.plusGroup) slot.plusGroup.visible = false;
+                const weaponCfg = WEAPON_TYPES[savedSlot.typeId];
+                slot.unitType = weaponCfg;
+                slot.level = Math.max(1, savedSlot.level || 1);
+                slot.totalSpent = savedSlot.totalSpent || weaponCfg.baseCost;
+
+                const mesh = createFighterMesh(weaponCfg);
+                const scale = 1 + Math.min(0.32, (slot.level - 1) * 0.02);
+                mesh.scale.set(scale, scale, scale);
+                slot.padMesh.add(mesh);
+                slot.unitGroup = mesh;
+                slot.ringMesh.material.color.setHex(0x4ade80);
+            } else {
+                slot.ringMesh.material.color.setHex(slot.unlocked ? 0x6ba383 : 0xd97706);
+            }
+        });
+    }
+    updateHUD();
+}
+
+async function syncCloudSaveNow() {
+    if (!currentAccount || !currentAccount.id) return;
+    try {
+        const payload = {
+            save_data: serializeProgressData(),
+            updated_at: new Date().toISOString()
+        };
+        await fetch(`${SUPABASE_URL}/rest/v1/players?id=eq.${encodeURIComponent(currentAccount.id)}`, {
+            method: 'PATCH',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=minimal'
+            },
+            body: JSON.stringify(payload)
+        });
+    } catch (e) {}
+}
+
+function scheduleCloudSave() {
+    if (!currentAccount || !currentAccount.id) return;
+    clearTimeout(cloudSyncTimer);
+    cloudSyncTimer = setTimeout(syncCloudSaveNow, 450);
+}
+
 function saveGameProgress() {
     try {
-        const data = {
-            wave: state.wave,
-            scrap: state.scrap,
-            sawmillLevel: state.sawmillLevel,
-            slots: state.slots.map(s => ({
-                unlocked: s.unlocked,
-                typeId: s.unitType ? s.unitType.typeId : null,
-                level: s.level,
-                totalSpent: s.totalSpent
-            }))
-        };
+        const data = serializeProgressData();
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch (e) {}
+    scheduleCloudSave();
 }
 
 function loadGameProgress() {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return;
-        const data = JSON.parse(raw);
-        if (typeof data.wave === 'number') state.wave = Math.max(1, data.wave);
-        if (typeof data.scrap === 'number') state.scrap = Math.max(0, data.scrap);
-        if (typeof data.sawmillLevel === 'number') state.sawmillLevel = Math.max(0, data.sawmillLevel);
-        applySawmillToFence();
-        refreshSawmillVisuals();
+        applyProgressData(JSON.parse(raw));
+    } catch (e) {}
+}
 
-        if (Array.isArray(data.slots)) {
-            data.slots.forEach((savedSlot, idx) => {
-                const slot = state.slots[idx];
-                if (!slot) return;
-                slot.unlocked = idx < 2 || savedSlot.unlocked === true;
-                if (slot.plusGroup) {
-                    slot.plusGroup.visible = !slot.unlocked;
-                }
-                if (savedSlot.typeId !== null && WEAPON_TYPES[savedSlot.typeId]) {
-                    slot.unlocked = true;
-                    if (slot.plusGroup) slot.plusGroup.visible = false;
-                    const weaponCfg = WEAPON_TYPES[savedSlot.typeId];
-                    slot.unitType = weaponCfg;
-                    slot.level = Math.max(1, savedSlot.level || 1);
-                    slot.totalSpent = savedSlot.totalSpent || weaponCfg.baseCost;
+async function hashPasswordWithSalt(password, existingSaltHex) {
+    const encoder = new TextEncoder();
+    let saltBytes;
+    if (existingSaltHex) {
+        saltBytes = new Uint8Array(existingSaltHex.match(/.{1,2}/g).map(h => parseInt(h, 16)));
+    } else {
+        saltBytes = new Uint8Array(16);
+        crypto.getRandomValues(saltBytes);
+    }
+    const saltHex = Array.from(saltBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+    const data = encoder.encode(`${saltHex}:${password}`);
+    const digest = await crypto.subtle.digest('SHA-256', data);
+    const hashHex = Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+    return `${saltHex}:${hashHex}`;
+}
 
-                    const mesh = createFighterMesh(weaponCfg);
-                    const scale = 1 + Math.min(0.32, (slot.level - 1) * 0.02);
-                    mesh.scale.set(scale, scale, scale);
-                    slot.padMesh.add(mesh);
-                    slot.unitGroup = mesh;
-                    slot.ringMesh.material.color.setHex(0x4ade80);
-                } else {
-                    slot.ringMesh.material.color.setHex(slot.unlocked ? 0x6ba383 : 0xd97706);
-                }
+function normalizeNick(rawNick) {
+    return (rawNick || '').trim().toLowerCase();
+}
+
+async function fetchPlayerByUsername(username) {
+    const url = `${SUPABASE_URL}/rest/v1/players?username=eq.${encodeURIComponent(username)}&select=id,username,password_hash,save_data,compensation_scrap`;
+    const res = await fetch(url, {
+        headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`
+        }
+    });
+    if (!res.ok) throw new Error('Network error');
+    const rows = await res.json();
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+}
+
+async function claimCompensationIfAny(playerRow) {
+    const comp = Number(playerRow.compensation_scrap || 0);
+    if (comp > 0) {
+        state.scrap += comp;
+        updateHUD();
+        try {
+            await fetch(`${SUPABASE_URL}/rest/v1/players?id=eq.${encodeURIComponent(playerRow.id)}`, {
+                method: 'PATCH',
+                headers: {
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': `Bearer ${SUPABASE_KEY}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=minimal'
+                },
+                body: JSON.stringify({
+                    compensation_scrap: 0,
+                    save_data: serializeProgressData(),
+                    updated_at: new Date().toISOString()
+                })
             });
+        } catch (e) {}
+        return comp;
+    }
+    return 0;
+}
+
+function enterCampAfterAuth(accountObj) {
+    currentAccount = accountObj;
+    try {
+        if (accountObj) {
+            localStorage.setItem(SESSION_KEY, JSON.stringify(accountObj));
+        } else {
+            localStorage.removeItem(SESSION_KEY);
         }
     } catch (e) {}
+
+    const nickLabel = document.getElementById('account-menu-nick');
+    if (nickLabel) {
+        nickLabel.textContent = accountObj ? accountObj.username : 'ГОСТЬ';
+    }
+
+    document.getElementById('auth-screen').classList.add('hidden');
+    document.getElementById('main-menu').classList.add('hidden');
+    document.getElementById('hud-stats').classList.remove('hidden');
+    document.getElementById('hud-stats').classList.add('flex');
+    document.getElementById('game-ui').classList.remove('hidden');
+    document.getElementById('btn-open-wipe').classList.remove('hidden');
+
+    state.started = true;
+    updateHUD();
+    updateWaveStatus();
 }
 
 // ==========================================
@@ -2917,6 +3114,157 @@ window.addEventListener('resize', () => {
     camera.updateProjectionMatrix();
     renderer.setSize(wrapper.clientWidth, wrapper.clientHeight);
 });
+
+(function initAuthUI() {
+    let authMode = 'login'; // 'login' | 'register'
+    const tabLogin = document.getElementById('tab-auth-login');
+    const tabRegister = document.getElementById('tab-auth-register');
+    const subtitle = document.getElementById('auth-subtitle');
+    const submitBtn = document.getElementById('btn-auth-submit');
+    const statusEl = document.getElementById('auth-status');
+    const formEl = document.getElementById('auth-form');
+    const nickInput = document.getElementById('auth-username');
+    const passInput = document.getElementById('auth-password');
+
+    function setAuthMode(mode) {
+        authMode = mode;
+        statusEl.textContent = '';
+        if (mode === 'login') {
+            tabLogin.className = 'py-1.5 rounded-lg font-military text-[11px] bg-[#365745] text-[#eef7f2] transition cursor-pointer';
+            tabRegister.className = 'py-1.5 rounded-lg font-military text-[11px] text-[#7f9689] hover:text-[#c7d6cd] transition cursor-pointer';
+            subtitle.textContent = 'Войди под своим ником, чтобы сохранить прогресс';
+            submitBtn.textContent = 'ВОЙТИ В ЛАГЕРЬ';
+            passInput.setAttribute('autocomplete', 'current-password');
+        } else {
+            tabRegister.className = 'py-1.5 rounded-lg font-military text-[11px] bg-[#365745] text-[#eef7f2] transition cursor-pointer';
+            tabLogin.className = 'py-1.5 rounded-lg font-military text-[11px] text-[#7f9689] hover:text-[#c7d6cd] transition cursor-pointer';
+            subtitle.textContent = 'Придумай ник и пароль для своего позывного';
+            submitBtn.textContent = 'СОЗДАТЬ И ВОЙТИ';
+            passInput.setAttribute('autocomplete', 'new-password');
+        }
+    }
+
+    tabLogin.addEventListener('click', () => { playAtmosphericSound('click'); setAuthMode('login'); });
+    tabRegister.addEventListener('click', () => { playAtmosphericSound('click'); setAuthMode('register'); });
+
+    try {
+        const savedSess = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+        if (savedSess && savedSess.username) {
+            nickInput.value = savedSess.username;
+        }
+    } catch (e) {}
+
+    formEl.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        playAtmosphericSound('click');
+        const nick = normalizeNick(nickInput.value);
+        const pass = passInput.value || '';
+
+        if (!/^[a-zA-Z0-9_\-а-яА-ЯёЁ]{2,20}$/.test(nickInput.value.trim())) {
+            statusEl.textContent = 'Ник: 2–20 символов (буквы, цифры, _ или -)';
+            return;
+        }
+        if (pass.length < 3) {
+            statusEl.textContent = 'Пароль должен быть не короче 3 символов';
+            return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.classList.add('opacity-60');
+        statusEl.textContent = authMode === 'login' ? 'Проверяем позывной...' : 'Создаём аккаунт...';
+
+        try {
+            const existing = await fetchPlayerByUsername(nick);
+
+            if (authMode === 'login') {
+                if (!existing) {
+                    statusEl.textContent = 'Такого ника пока нет — нажми «НОВЫЙ НИК»';
+                    return;
+                }
+                const parts = String(existing.password_hash || '').split(':');
+                if (parts.length !== 2) {
+                    statusEl.textContent = 'Ошибка формата пароля в профиле';
+                    return;
+                }
+                const computed = await hashPasswordWithSalt(pass, parts[0]);
+                if (computed !== existing.password_hash) {
+                    statusEl.textContent = 'Неверный пароль';
+                    return;
+                }
+
+                applyProgressData(existing.save_data);
+                const claimed = await claimCompensationIfAny(existing);
+                saveGameProgress();
+                enterCampAfterAuth({ id: existing.id, username: existing.username });
+                if (claimed > 0) {
+                    setTimeout(() => {
+                        alert(`Компенсация начислена: +${claimed} ⚙️`);
+                    }, 120);
+                }
+            } else {
+                if (existing) {
+                    statusEl.textContent = 'Этот ник уже занят';
+                    return;
+                }
+                const passHash = await hashPasswordWithSalt(pass);
+                const initialSave = serializeProgressData();
+                const createRes = await fetch(`${SUPABASE_URL}/rest/v1/players`, {
+                    method: 'POST',
+                    headers: {
+                        'apikey': SUPABASE_KEY,
+                        'Authorization': `Bearer ${SUPABASE_KEY}`,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=representation'
+                    },
+                    body: JSON.stringify({
+                        username: nick,
+                        password_hash: passHash,
+                        save_data: initialSave,
+                        compensation_scrap: 0,
+                        updated_at: new Date().toISOString()
+                    })
+                });
+                if (!createRes.ok) {
+                    statusEl.textContent = 'Не удалось создать аккаунт. Попробуй ещё раз';
+                    return;
+                }
+                const createdRows = await createRes.json();
+                const created = Array.isArray(createdRows) && createdRows[0] ? createdRows[0] : null;
+                if (!created) {
+                    statusEl.textContent = 'Ошибка создания профиля';
+                    return;
+                }
+                enterCampAfterAuth({ id: created.id, username: created.username });
+            }
+        } catch (err) {
+            statusEl.textContent = 'Нет связи с базой. Проверь интернет';
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.classList.remove('opacity-60');
+        }
+    });
+
+    document.getElementById('btn-guest-play').addEventListener('click', () => {
+        playAtmosphericSound('click');
+        enterCampAfterAuth(null);
+    });
+
+    document.getElementById('btn-account-switch').addEventListener('click', () => {
+        playAtmosphericSound('click');
+        settingsDropdown.classList.add('hidden');
+        syncCloudSaveNow();
+        state.started = false;
+        state.inWave = false;
+        closeSlotModal();
+        closeSawmillModal();
+        document.getElementById('game-ui').classList.add('hidden');
+        document.getElementById('hud-stats').classList.add('hidden');
+        document.getElementById('hud-stats').classList.remove('flex');
+        document.getElementById('auth-screen').classList.remove('hidden');
+        passInput.value = '';
+        statusEl.textContent = '';
+    });
+})();
 
 updateLanguage();
 requestAnimationFrame(animate);
