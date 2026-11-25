@@ -752,17 +752,17 @@ function updateLanguage() {
 // ==========================================
 // 2. ТИПЫ БОЙЦОВ, ПОЗИЦИИ И СОХРАНЕНИЕ ПРОГРЕССА
 // ==========================================
-const STORAGE_KEY = 'swamp_perimeter_save_v1';
+const STORAGE_KEY = 'swamp_perimeter_save_v2';
 
 const WEAPON_TYPES = [
-    { typeId: 0, name: "Glock-18", baseCost: 50,   upgBase: 15,   upgMult: 1.58, baseDmg: 8,   fireRate: 1.15, range: 13, color: 0x5c6e63 },
-    { typeId: 1, name: "USP-S",    baseCost: 160,  upgBase: 40,   upgMult: 1.55, baseDmg: 12,  fireRate: 1.10, range: 17, color: 0x46594e },
-    { typeId: 2, name: "MP5-SD",   baseCost: 420,  upgBase: 85,   upgMult: 1.52, baseDmg: 8,   fireRate: 2.9,  range: 16, color: 0x3d5442 },
-    { typeId: 3, name: "Galil AR", baseCost: 1100, upgBase: 150,  upgMult: 1.45, baseDmg: 21,  fireRate: 2.0,  range: 21, color: 0x736343 },
-    { typeId: 4, name: "AK-47",    baseCost: 2800, upgBase: 360,  upgMult: 1.48, baseDmg: 42,  fireRate: 1.7,  range: 23, color: 0x7d4934 },
-    { typeId: 5, name: "SSG-08",   baseCost: 6500, upgBase: 820,  upgMult: 1.50, baseDmg: 125, fireRate: 0.80, range: 31, color: 0x455d6b },
-    { typeId: 6, name: "AWP",      baseCost: 15000,upgBase: 1850, upgMult: 1.52, baseDmg: 1000, fireRate: 0.45, range: 38, color: 0x3b5737 },
-    { typeId: 7, name: "XM-1014",  baseCost: 4800, upgBase: 720,   upgMult: 1.50, baseDmg: 80,  fireRate: 0.85, range: 8,  color: 0x3c4a52, shotgun: true }
+    { typeId: 0, name: "Glock-18", baseCost: 50,      upgBase: 12,   upgMult: 1.105, baseDmg: 8,    fireRate: 1.15, range: 13, color: 0x5c6e63 },
+    { typeId: 1, name: "USP-S",    baseCost: 2200,    upgBase: 42,   upgMult: 1.11,  baseDmg: 12,   fireRate: 1.10, range: 17, color: 0x46594e },
+    { typeId: 2, name: "MP5-SD",   baseCost: 16000,   upgBase: 110,  upgMult: 1.115, baseDmg: 8,    fireRate: 2.9,  range: 16, color: 0x3d5442 },
+    { typeId: 3, name: "Galil AR", baseCost: 65000,   upgBase: 240,  upgMult: 1.12,  baseDmg: 21,   fireRate: 2.0,  range: 21, color: 0x736343 },
+    { typeId: 4, name: "AK-47",    baseCost: 220000,  upgBase: 550,  upgMult: 1.12,  baseDmg: 42,   fireRate: 1.7,  range: 23, color: 0x7d4934 },
+    { typeId: 5, name: "SSG-08",   baseCost: 2500000, upgBase: 2500, upgMult: 1.14,  baseDmg: 125,  fireRate: 0.80, range: 31, color: 0x455d6b },
+    { typeId: 6, name: "AWP",      baseCost: 1150000, upgBase: 1800, upgMult: 1.13,  baseDmg: 1000, fireRate: 0.45, range: 38, color: 0x3b5737 },
+    { typeId: 7, name: "XM-1014",  baseCost: 450000,  upgBase: 900,  upgMult: 1.12,  baseDmg: 80,   fireRate: 0.85, range: 8,  color: 0x3c4a52, shotgun: true }
 ];
 
 const SPAWN_POSITIONS = [
@@ -775,7 +775,7 @@ const SPAWN_POSITIONS = [
     [3.4, 0]
 ];
 
-const SLOT_UNLOCK_COSTS = [0, 0, 90, 260, 680, 1750, 4500];
+const SLOT_UNLOCK_COSTS = [0, 0, 120, 1800, 18000, 110000, 400000];
 
 const state = {
     started: false,
@@ -2051,7 +2051,7 @@ function spawnZombie() {
     let bodyColor = 0x8bb57e, clothesColor = 0x627369;
     if (kind === 'runner') { hpMult = 0.55; spMult = 1.6; bodyColor = 0x4e8f86; clothesColor = 0x2f6f6b; }
     if (kind === 'brute') { hpMult = 1.7; spMult = 0.62; bodyColor = 0x9aa64e; clothesColor = 0x7d8a3e; }
-    const maxHp = Math.floor(32 * Math.pow(1.38, state.wave - 1) * hpMult);
+    const maxHp = Math.floor(32 * (1 + (state.wave - 1) * 0.13) * hpMult);
     const speed = (1.45 + Math.min(2.2, state.wave * 0.06) + (Math.random() * 0.3)) * spMult;
 
     const { zombieGroup, hpBarGroup, hpFill } = createZombieMesh(bodyColor, clothesColor);
@@ -2070,9 +2070,8 @@ function spawnZombie() {
         speed,
         reward: (() => {
             const w = state.wave;
-            const table = [0, 4, 15, 20, 30, 50, 75, 100];
-            const base = w === 1 ? 3 + Math.floor(Math.random() * 2) : (w <= 7 ? table[w] : Math.round(100 * Math.pow(1.32, w - 7)));
-            return Math.round(base * (kind === 'normal' ? 1 : 3));
+            const base = 2 + w * 0.09;
+            return Math.max(2, Math.round(base * (kind === 'normal' ? 1 : 3)));
         })()
     });
 }
@@ -2310,7 +2309,7 @@ function animate(now) {
     if (state.inWave && state.zombiesToSpawn === 0 && state.zombies.length === 0) {
         state.inWave = false;
         state.wave += 1;
-        state.scrap += Math.round((12 + state.wave * 3) * 0.6 * Math.pow(1.32, state.wave - 1));
+        state.scrap += Math.round(10 + state.wave * 2.5 + state.wave * state.wave * 0.08);
         saveGameProgress();
         updateHUD();
         if (selectedSlotId !== null) openSlotModal(selectedSlotId);
@@ -2452,10 +2451,10 @@ document.getElementById('btn-confirm-wipe').addEventListener('click', () => {
 });
 
 // ===== ЛЕСОПИЛКА =====
-const SAWMILL_PRICES = [100, 200, 300, 350, 450, 600, 800, 1050];
+const SAWMILL_PRICES = [250, 550, 1100, 2200, 4200, 8000, 15000, 28000];
 function getSawmillNextCost() {
     const lvl = state.sawmillLevel;
-    return lvl < SAWMILL_PRICES.length ? SAWMILL_PRICES[lvl] : Math.round(SAWMILL_PRICES[7] * Math.pow(1.35, lvl - 7));
+    return lvl < SAWMILL_PRICES.length ? SAWMILL_PRICES[lvl] : Math.round(SAWMILL_PRICES[7] * Math.pow(1.45, lvl - 7));
 }
 function updateSawmillButtonState() {
     const cost = getSawmillNextCost();
