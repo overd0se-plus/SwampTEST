@@ -1079,7 +1079,10 @@ async function fetchPlayerByUsername(username) {
             'Authorization': `Bearer ${SUPABASE_KEY}`
         }
     });
-    if (!res.ok) throw new Error('Network error');
+    if (!res.ok) {
+        const errBody = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}${errBody ? ': ' + errBody.slice(0, 90) : ''}`);
+    }
     const rows = await res.json();
     return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
 }
@@ -3237,7 +3240,8 @@ window.addEventListener('resize', () => {
                 enterCampAfterAuth({ id: created.id, username: created.username });
             }
         } catch (err) {
-            statusEl.textContent = 'Нет связи с базой. Проверь интернет';
+            const detail = err && err.message ? ` (${err.message})` : '';
+            statusEl.textContent = `Связь с базой не прошла${detail}`;
         } finally {
             submitBtn.disabled = false;
             submitBtn.classList.remove('opacity-60');
