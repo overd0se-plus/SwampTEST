@@ -6,7 +6,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Swamp Perimeter">
-    <title>Swamp Perimeter: Outpost</title>
+    <title>SwampDose: OVER</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <!-- Игровые шрифты с поддержкой кириллицы: Russo One (заголовки/акценты) и Exo 2 (тактический UI) -->
@@ -202,6 +202,19 @@
                     <span class="text-[10px] text-emerald-300 mt-0.5" id="dismiss-refund-label">+⚙️ 35</span>
                 </button>
             </div>
+
+            <!-- Витрина оружия: все цены в одном месте -->
+            <button id="btn-toggle-showcase" class="w-full py-1.5 px-2 rounded-lg font-military text-[10px] bg-[#1b2922] hover:bg-[#25382e] border border-[#2f4639] text-[#b6cbbf] transition flex items-center justify-between cursor-pointer">
+                <span data-i18n="showcaseBtn">📋 ВИТРИНА ЦЕН</span>
+                <span id="showcase-arrow">▾</span>
+            </button>
+            <div id="showcase-panel" class="hidden flex-col gap-1">
+                <div class="flex justify-between items-center text-[9px] text-[#789183] font-semibold px-0.5">
+                    <span data-i18n="showcaseYou">У вас</span>
+                    <span id="showcase-scrap" class="text-amber-300 font-military">⚙️ 0</span>
+                </div>
+                <div id="showcase-list" class="flex flex-col gap-1 max-h-40 overflow-y-auto pr-1"></div>
+            </div>
         </div>
 
         <!-- Покупка заблокированной позиции -->
@@ -298,7 +311,12 @@ const i18n = {
         wipeTitle: "ПОЛНЫЙ СБРОС?",
         wipeDesc: "Весь прогресс, нанятые бойцы, улучшения, шестеренки и волны будут полностью удалены.",
         cancel: "ОТМЕНА",
-        confirmWipe: "СБРОСИТЬ ВСЁ"
+        confirmWipe: "СБРОСИТЬ ВСЁ",
+        showcaseBtn: "📋 ВИТРИНА ЦЕН",
+        showcaseYou: "У вас",
+        showcaseNeed: "ещё",
+        bossPhase: "👹 БОСС!",
+        bossWarn: "⚠ БОСС"
     },
     en: {
         subtitle: "Hold the dusk perimeter. Tap platforms inside the camp to deploy your fighters.",
@@ -328,7 +346,12 @@ const i18n = {
         wipeTitle: "FULL RESET?",
         wipeDesc: "All progress, hired fighters, upgrades, gears, and waves will be completely wiped.",
         cancel: "CANCEL",
-        confirmWipe: "WIPE ALL"
+        confirmWipe: "WIPE ALL",
+        showcaseBtn: "📋 PRICE SHOWCASE",
+        showcaseYou: "You have",
+        showcaseNeed: "need",
+        bossPhase: "👹 BOSS!",
+        bossWarn: "⚠ BOSS"
     }
 };
 
@@ -437,6 +460,7 @@ const WEAPON_SND = {
     4: { crackF: 1200, crackLen: 0.05,  crackVol: 0.38, bodyF: 2400, bodyE: 300, bodyLen: 0.18, bodyVol: 0.30, thF0: 110, thF1: 50, thLen: 0.12, thVol: 0.26, send: 0.40 },
     5: { crackF: 1800, crackLen: 0.06,  crackVol: 0.40, bodyF: 3600, bodyE: 500, bodyLen: 0.22, bodyVol: 0.24, thF0: 100, thF1: 55, thLen: 0.14, thVol: 0.18, send: 0.60 },
     6: { crackF: 1000, crackLen: 0.08,  crackVol: 0.50, bodyF: 2600, bodyE: 180, bodyLen: 0.40, bodyVol: 0.38, thF0: 85,  thF1: 35, thLen: 0.30, thVol: 0.45, send: 0.80 },
+    8: { crackF: 1100, crackLen: 0.045, crackVol: 0.30, bodyF: 2800, bodyE: 300, bodyLen: 0.16, bodyVol: 0.30, thF0: 120, thF1: 55, thLen: 0.12, thVol: 0.24, send: 0.40 },
     shotgun: { crackF: 800, crackLen: 0.06, crackVol: 0.45, bodyF: 2000, bodyE: 200, bodyLen: 0.25, bodyVol: 0.38, thF0: 100, thF1: 40, thLen: 0.20, thVol: 0.35, send: 0.50 }
 };
 const lastShotTime = {};
@@ -725,6 +749,14 @@ document.addEventListener('visibilitychange', () => {
     } catch (e) {}
 });
 
+function updateWaveStatus() {
+    const L = i18n[currentLang];
+    let txt;
+    if (state.inWave) txt = state.bossSpawned ? L.bossPhase : L.combatPhase;
+    else txt = isBossWave(state.wave) ? `${L.prepPhase} · ${L.bossWarn}` : L.prepPhase;
+    document.getElementById('wave-status').textContent = txt;
+}
+
 function updateLanguage() {
     document.querySelectorAll('[data-i18n]').forEach(el => {
         const key = el.getAttribute('data-i18n');
@@ -733,9 +765,7 @@ function updateLanguage() {
         }
     });
     document.getElementById('lang-code').textContent = currentLang.toUpperCase();
-    document.getElementById('wave-status').textContent = state.inWave 
-        ? i18n[currentLang].combatPhase 
-        : i18n[currentLang].prepPhase;
+    updateWaveStatus();
 
     const battleBtn = document.getElementById('btn-battle');
     if (state.inWave) {
@@ -760,10 +790,26 @@ const WEAPON_TYPES = [
     { typeId: 2, name: "MP5-SD",   baseCost: 16000,   upgBase: 110,  upgMult: 1.115, baseDmg: 8,    fireRate: 2.9,  range: 16, color: 0x3d5442 },
     { typeId: 3, name: "Galil AR", baseCost: 65000,   upgBase: 240,  upgMult: 1.12,  baseDmg: 21,   fireRate: 2.0,  range: 21, color: 0x736343 },
     { typeId: 4, name: "AK-47",    baseCost: 220000,  upgBase: 550,  upgMult: 1.12,  baseDmg: 42,   fireRate: 1.7,  range: 23, color: 0x7d4934 },
-    { typeId: 5, name: "SSG-08",   baseCost: 2500000, upgBase: 2500, upgMult: 1.14,  baseDmg: 125,  fireRate: 0.80, range: 31, color: 0x455d6b },
+    { typeId: 5, name: "SSG-08",   baseCost: 400000, upgBase: 770, upgMult: 1.14,  baseDmg: 125,  fireRate: 0.80, range: 31, color: 0x455d6b },
     { typeId: 6, name: "AWP",      baseCost: 1150000, upgBase: 1800, upgMult: 1.13,  baseDmg: 1000, fireRate: 0.45, range: 38, color: 0x3b5737 },
-    { typeId: 7, name: "XM-1014",  baseCost: 450000,  upgBase: 900,  upgMult: 1.12,  baseDmg: 80,   fireRate: 0.85, range: 8,  color: 0x3c4a52, shotgun: true }
+    { typeId: 7, name: "XM-1014",  baseCost: 450000,  upgBase: 900,  upgMult: 1.12,  baseDmg: 80,   fireRate: 0.85, range: 8,  color: 0x3c4a52, shotgun: true },
+    // Desert Eagle: между USP-S и MP5-SD. Урон за выстрел ×2.5 от USP, но темп в 1.7 раза ниже; DPS ниже MP5-SD.
+    // typeId 8 добавлен В КОНЕЦ массива, чтобы старые сохранения не сломались.
+    { typeId: 8, name: "Desert Eagle", baseCost: 6500, upgBase: 70, upgMult: 1.112, baseDmg: 30, fireRate: 0.65, range: 18, color: 0x8d8f86 }
 ];
+
+// Босс каждой 10-й волны — всё крутится здесь
+const BOSS_CFG = {
+    every: 10,        // каждая N-я волна
+    hpBase: 18,       // HP босса = HP обычного зомби × (hpBase + волна × hpPerWave)
+    hpPerWave: 0.6,
+    speed: 0.45,      // обычные зомби ~1.5–3.8
+    scale: 2.8,       // размер
+    dmgMult: 1.8,     // урон по забору относительно обычного зомби
+    rewardMult: 2.0,  // награда = примерный доход за волну × rewardMult
+    spawnDelay: 3     // сек. между последним обычным зомби и боссом
+};
+function isBossWave(w) { return w > 0 && w % BOSS_CFG.every === 0; }
 
 const SPAWN_POSITIONS = [
     [-3.1, -3.1],
@@ -798,6 +844,9 @@ const state = {
     spawnTimer: 0,
     zombies: [],
     bullets: [],
+    bossPending: false,
+    bossSpawned: false,
+    bossDelay: 0,
     slots: SPAWN_POSITIONS.map((pos, idx) => ({
         id: idx,
         pos,
@@ -922,15 +971,36 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-const ambientLight = new THREE.HemisphereLight(0x709180, 0x223028, 1.2);
+// Рассеянный свет слабее, направленный сильнее — иначе тени просто не видны
+const ambientLight = new THREE.HemisphereLight(0x709180, 0x223028, 0.9);
 scene.add(ambientLight);
 
-const dirLight = new THREE.DirectionalLight(0xc2dbcc, 0.95);
+const dirLight = new THREE.DirectionalLight(0xd2e6d8, 1.3);
 dirLight.position.set(10, 18, 12);
 dirLight.castShadow = true;
-dirLight.shadow.mapSize.width = 1024;
-dirLight.shadow.mapSize.height = 1024;
+dirLight.shadow.mapSize.set(2048, 2048);
+// Главный баг был здесь: рамка теней по умолчанию ±5 юнитов, а лагерь и зомби — в радиусе ~25.
+const SHADOW_EXTENT = 18;
+dirLight.shadow.camera.left = -SHADOW_EXTENT;
+dirLight.shadow.camera.right = SHADOW_EXTENT;
+dirLight.shadow.camera.top = SHADOW_EXTENT;
+dirLight.shadow.camera.bottom = -SHADOW_EXTENT;
+dirLight.shadow.camera.near = 1;
+dirLight.shadow.camera.far = 60;
+dirLight.shadow.camera.updateProjectionMatrix();
+dirLight.shadow.bias = -0.0004;
+dirLight.shadow.normalBias = 0.035;
 scene.add(dirLight);
+
+// Включает отбрасывание и приём теней у всех обычных мешей группы
+// (мешам с userData.noCast тень не отбрасывается: земля, лужи, трава)
+function applyShadows(root) {
+    root.traverse(o => {
+        if (!o.isMesh || !o.material || !o.material.isMeshStandardMaterial) return;
+        if (!o.userData.noCast) o.castShadow = true;
+        o.receiveShadow = true;
+    });
+}
 
 const baseLight = new THREE.PointLight(0xe09f56, 1.4, 15);
 baseLight.position.set(0, 2.2, 1.6);
@@ -947,12 +1017,13 @@ function createWeaponMesh(weaponCfg) {
     const metalMat = new THREE.MeshStandardMaterial({ color: 0x23282b, metalness: 0.7, roughness: 0.35 });
     const woodMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2c, roughness: 0.85, flatShading: true });
     const t = weaponCfg.typeId;
-    const isPistol = t <= 1;
-    const isSniper = t >= 5;
+    const isDeagle = t === 8;
+    const isPistol = t <= 1 || isDeagle;
+    const isSniper = t === 5 || t === 6;
     const isShotgun = t === 7;
 
-    const barrelLen = isPistol ? 0.16 : (isSniper ? 0.62 : (isShotgun ? 0.5 : 0.42));
-    const barrelR = isShotgun ? 0.036 : 0.022;
+    const barrelLen = isDeagle ? 0.21 : isPistol ? 0.16 : (isSniper ? 0.62 : (isShotgun ? 0.5 : 0.42));
+    const barrelR = isShotgun ? 0.036 : (isDeagle ? 0.03 : 0.022);
     const barrelGeo = new THREE.CylinderGeometry(barrelR, barrelR, barrelLen, 8);
     barrelGeo.rotateX(Math.PI / 2);
     const barrel = new THREE.Mesh(barrelGeo, metalMat);
@@ -967,10 +1038,20 @@ function createWeaponMesh(weaponCfg) {
         g.add(sil);
     }
 
-    const bodyLen = isPistol ? 0.16 : 0.4;
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.07, isPistol ? 0.1 : 0.13, bodyLen), bodyMat);
+    const bodyLen = isDeagle ? 0.26 : (isPistol ? 0.16 : 0.4);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(isDeagle ? 0.085 : 0.07, isDeagle ? 0.13 : (isPistol ? 0.1 : 0.13), bodyLen), bodyMat);
     body.position.set(0, 0, barrelLen * 0.4);
     g.add(body);
+
+    if (isDeagle) {
+        const dGrip = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.15, 0.08), metalMat);
+        dGrip.position.set(0, -0.11, -0.02);
+        dGrip.rotation.x = 0.18;
+        g.add(dGrip);
+        const dRail = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.02, 0.22), metalMat);
+        dRail.position.set(0, 0.075, barrelLen * 0.4);
+        g.add(dRail);
+    }
 
     if (!isPistol && t !== 5 && t !== 6) {
         const mag = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.16, 0.08), metalMat);
@@ -1071,6 +1152,7 @@ function createFighterMesh(weaponCfg) {
 
     unitGroup.add(createWeaponMesh(weaponCfg));
 
+    applyShadows(unitGroup);
     return unitGroup;
 }
 
@@ -1181,6 +1263,7 @@ function buildSwampDecor() {
         const puddle = new THREE.Mesh(new THREE.CircleGeometry(1, 20), puddleMat);
         puddle.scale.set(rx, rz, 1);
         puddle.rotation.x = -Math.PI / 2;
+        puddle.userData.noCast = true;
         puddle.position.set(px, 0.02, pz);
         scene.add(puddle);
     });
@@ -1196,6 +1279,7 @@ function buildSwampDecor() {
         for (let j = 0; j < n; j++) {
             const blade = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.3 + Math.random() * 0.3, 4), grassMats[Math.floor(Math.random() * grassMats.length)]);
             blade.position.set(x + (Math.random() - 0.5) * 0.35, 0.18, z + (Math.random() - 0.5) * 0.35);
+            blade.userData.noCast = true;
             scene.add(blade);
         }
     }
@@ -1213,6 +1297,7 @@ function buildSawmill() {
     );
     groundPad.position.set(sawX, 0.16, sawZ);
     groundPad.receiveShadow = true;
+    groundPad.userData.noCast = true;
     scene.add(groundPad);
 
     const ringMat = new THREE.MeshBasicMaterial({
@@ -1329,6 +1414,7 @@ function buildEnvironment() {
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.position.y = -0.5;
     ground.receiveShadow = true;
+    ground.userData.noCast = true;
     scene.add(ground);
 
     const baseFloorGeo = new THREE.BoxGeometry(8.6, 0.2, 8.6);
@@ -1336,6 +1422,7 @@ function buildEnvironment() {
     const baseFloor = new THREE.Mesh(baseFloorGeo, baseFloorMat);
     baseFloor.position.y = 0.05;
     baseFloor.receiveShadow = true;
+    baseFloor.userData.noCast = true;
     scene.add(baseFloor);
 
     const fenceMat = new THREE.MeshStandardMaterial({ color: 0x453b32, roughness: 0.85, flatShading: true });
@@ -1422,6 +1509,7 @@ function buildEnvironment() {
     });
 }
 buildEnvironment();
+applyShadows(scene);
 loadGameProgress();
 
 // ==========================================
@@ -1714,6 +1802,66 @@ function highlightSelectedSlot(id) {
     });
 }
 
+let showcaseOpen = false;
+
+function fmtNum(n) {
+    if (n >= 1e6) return (n / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'M';
+    if (n >= 1e3) return (n / 1e3).toFixed(n >= 1e4 ? 0 : 1).replace(/\.0$/, '') + 'K';
+    return String(n);
+}
+
+function renderShowcase() {
+    const panel = document.getElementById('showcase-panel');
+    const arrow = document.getElementById('showcase-arrow');
+    if (!panel) return;
+    panel.classList.toggle('hidden', !showcaseOpen);
+    panel.classList.toggle('flex', showcaseOpen);
+    arrow.textContent = showcaseOpen ? '▴' : '▾';
+    if (!showcaseOpen) return;
+
+    const L = i18n[currentLang];
+    document.getElementById('showcase-scrap').textContent = `⚙️ ${fmtNum(state.scrap)}`;
+
+    const list = document.getElementById('showcase-list');
+    const prevScroll = list.scrollTop;
+    const owned = new Set(state.slots.filter(s => s.unitType).map(s => s.unitType.typeId));
+    const currentSlot = selectedSlotId !== null ? state.slots[selectedSlotId] : null;
+    const currentId = currentSlot && currentSlot.unitType ? currentSlot.unitType.typeId : null;
+
+    list.innerHTML = '';
+    [...WEAPON_TYPES].sort((a, b) => a.baseCost - b.baseCost).forEach(w => {
+        const canAfford = state.scrap >= w.baseCost;
+        const dps = w.baseDmg * w.fireRate * (w.shotgun ? 4 : 1);
+        const dpsTxt = dps >= 100 ? Math.round(dps) : dps.toFixed(1);
+        const row = document.createElement('div');
+        row.className = `px-2 py-1 rounded-lg border ${
+            w.typeId === currentId ? 'bg-[#2a3a2a] border-amber-500/60'
+            : canAfford ? 'bg-[#18261f] border-[#375244]'
+            : 'bg-[#121a16] border-[#212e27]'
+        }`;
+        row.innerHTML = `
+            <div class="flex justify-between items-center">
+                <span class="font-military text-[10px] text-[#e5f0ea]">${owned.has(w.typeId) ? '● ' : ''}${w.name}</span>
+                <span class="font-military text-[10px] ${canAfford ? 'text-amber-400' : 'text-[#7d8f84]'}">⚙️${fmtNum(w.baseCost)}</span>
+            </div>
+            <div class="flex justify-between items-center text-[9px] font-semibold">
+                <span class="text-[#789183]">⚔️${w.baseDmg}${w.shotgun ? '×4' : ''} · ${w.fireRate}/с · ≈${dpsTxt}</span>
+                ${canAfford
+                    ? '<span class="text-emerald-400">✓</span>'
+                    : `<span class="text-[#b08a4a]">${L.showcaseNeed} ⚙️${fmtNum(w.baseCost - state.scrap)}</span>`}
+            </div>`;
+        list.appendChild(row);
+    });
+    list.scrollTop = prevScroll;
+}
+
+document.getElementById('btn-toggle-showcase').addEventListener('click', () => {
+    playAtmosphericSound('click');
+    showcaseOpen = !showcaseOpen;
+    renderShowcase();
+    updateSlotModalPosition();
+});
+
 function openSlotModal(slotId) {
     if (slotId === 'sawmill') { openSawmillModal(); return; }
     selectedSlotId = slotId;
@@ -1753,7 +1901,7 @@ function openSlotModal(slotId) {
         hireList.classList.remove('hidden');
 
         hireList.innerHTML = '';
-        WEAPON_TYPES.forEach(w => {
+        [...WEAPON_TYPES].sort((a, b) => a.baseCost - b.baseCost).forEach(w => {
             const canAfford = state.scrap >= w.baseCost;
             const btn = document.createElement('button');
             btn.className = `px-2 py-1.5 rounded-lg border text-left transition flex justify-between items-center ${
@@ -1764,7 +1912,7 @@ function openSlotModal(slotId) {
             btn.innerHTML = `
                 <div>
                     <div class="font-military text-[11px] text-[#e5f0ea]">${w.name}</div>
-                    <div class="text-[9px] font-semibold text-[#789183]">⚔️${w.baseDmg}${w.shotgun ? ' ×4' : ''} · ${w.range}m</div>
+                    <div class="text-[9px] font-semibold text-[#789183]">⚔️${w.baseDmg}${w.shotgun ? ' ×4' : ''} · ${w.fireRate}/с · ${w.range}m</div>
                 </div>
                 <span class="font-military text-[11px] ${canAfford ? 'text-amber-400' : 'text-[#5b7065]'}">⚙️${w.baseCost}</span>
             `;
@@ -1800,6 +1948,7 @@ function openSlotModal(slotId) {
         upgBtn.onclick = () => upgradeUnitInSlot(slotId);
 
         document.getElementById('btn-dismiss-unit').onclick = () => dismissUnitInSlot(slotId);
+        renderShowcase();
     }
 
     updateSlotModalPosition();
@@ -1939,7 +2088,7 @@ function updateWaveProgressBar() {
         bar.style.width = '100%';
         return;
     }
-    const remaining = state.zombiesToSpawn + state.zombies.length;
+    const remaining = state.zombiesToSpawn + state.zombies.length + (state.bossPending ? 1 : 0);
     const pct = Math.max(0, Math.min(100, (remaining / state.waveTotalZombies) * 100));
     bar.style.width = `${pct}%`;
 }
@@ -1951,14 +2100,18 @@ function startWave() {
     if (state.inWave) return;
     state.inWave = true;
     const total = 10 + Math.floor(state.wave * 4.2);
-    state.waveTotalZombies = total;
+    const hasBoss = isBossWave(state.wave);
+    state.bossPending = hasBoss;
+    state.bossSpawned = false;
+    state.bossDelay = BOSS_CFG.spawnDelay;
+    state.waveTotalZombies = total + (hasBoss ? 1 : 0);
     state.zombiesToSpawn = total;
     state.spawnTimer = 0.15;
 
     const btn = document.getElementById('btn-battle');
     btn.classList.add('opacity-50', 'pointer-events-none');
     btn.innerHTML = `<span>⏳</span><span>${i18n[currentLang].inBattle}</span>`;
-    document.getElementById('wave-status').textContent = i18n[currentLang].combatPhase;
+    updateWaveStatus();
     updateWaveProgressBar();
 
     playAtmosphericSound('horn');
@@ -2036,6 +2189,7 @@ function createZombieMesh(bodyColor, clothesColor) {
 
     zombieGroup.add(hpBarGroup);
 
+    applyShadows(zombieGroup);
     return { zombieGroup, hpBarGroup, hpFill };
 }
 
@@ -2076,9 +2230,90 @@ function spawnZombie() {
     });
 }
 
+function createBossMesh() {
+    // Зелёное тело + оранжевая одежда, шипы, рога и светящиеся глаза
+    const parts = createZombieMesh(0x5fae3b, 0xe8731c);
+    const g = parts.zombieGroup;
+    const spikeMat = new THREE.MeshStandardMaterial({ color: 0xff8a1f, emissive: 0x6b2a00, roughness: 0.6, flatShading: true });
+    const toxicMat = new THREE.MeshStandardMaterial({ color: 0x8fd14f, emissive: 0x2c5a10, roughness: 0.5, flatShading: true });
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffb02e });
+
+    [[-0.13, 0.55], [0.13, 0.55], [-0.13, 0.82], [0.13, 0.82], [0, 1.0]].forEach(([x, y]) => {
+        const spike = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.34, 5), spikeMat);
+        spike.position.set(x, y, -0.2);
+        spike.rotation.x = -0.95;
+        g.add(spike);
+    });
+    [-0.33, 0.33].forEach(x => {
+        const s = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.3, 5), spikeMat);
+        s.position.set(x, 1.04, 0.05);
+        s.rotation.z = x < 0 ? 0.35 : -0.35;
+        g.add(s);
+    });
+    [-0.12, 0.12].forEach(x => {
+        const horn = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.22, 5), spikeMat);
+        horn.position.set(x, 1.4, 0.08);
+        horn.rotation.z = x < 0 ? 0.3 : -0.3;
+        g.add(horn);
+    });
+    [-0.085, 0.085].forEach(x => {
+        const eye = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.03), eyeMat);
+        eye.position.set(x, 1.2, 0.27);
+        g.add(eye);
+    });
+    [-0.29, 0.29].forEach(x => {
+        const fist = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), toxicMat);
+        fist.position.set(x, 0.85, 0.58);
+        g.add(fist);
+    });
+
+    parts.hpFill.material.color.setHex(0xf97316);
+    applyShadows(g);
+    return parts;
+}
+
+function spawnBoss() {
+    const angle = Math.random() * Math.PI * 2;
+    const x = Math.cos(angle) * 24;
+    const z = Math.sin(angle) * 24;
+
+    const { zombieGroup, hpBarGroup, hpFill } = createBossMesh();
+    zombieGroup.position.set(x, 0, z);
+    zombieGroup.lookAt(0, 0, 0);
+    zombieGroup.scale.setScalar(BOSS_CFG.scale);
+    scene.add(zombieGroup);
+
+    const w = state.wave;
+    const baseHp = 32 * (1 + (w - 1) * 0.13);
+    const maxHp = Math.floor(baseHp * (BOSS_CFG.hpBase + w * BOSS_CFG.hpPerWave));
+    const waveIncome = (10 + w * 4.2) * 1.8 * (2 + w * 0.09);
+
+    state.zombies.push({
+        mesh: zombieGroup,
+        hpBarGroup,
+        hpFill,
+        hp: maxHp,
+        maxHp,
+        speed: BOSS_CFG.speed,
+        reward: Math.round(waveIncome * BOSS_CFG.rewardMult),
+        isBoss: true,
+        aimY: 0.78 * BOSS_CFG.scale,
+        hitR: 0.95,
+        bodyR: 0.95,
+        fenceStop: 5.7,
+        dmgMult: BOSS_CFG.dmgMult,
+        bobAmp: 0.1,
+        bobSpeed: 0.0035
+    });
+
+    state.bossSpawned = true;
+    updateWaveStatus();
+    playAtmosphericSound('horn');
+}
+
 function shootBullet(slot, targetZombie) {
     const startPos = new THREE.Vector3(slot.pos[0], 0.95, slot.pos[1]);
-    const targetPos = targetZombie.mesh.position.clone().add(new THREE.Vector3(0, 0.78, 0));
+    const targetPos = targetZombie.mesh.position.clone().add(new THREE.Vector3(0, targetZombie.aimY || 0.78, 0));
 
     if (slot.unitGroup) {
         slot.unitGroup.lookAt(targetPos.x, 0.16, targetPos.z);
@@ -2203,16 +2438,26 @@ function animate(now) {
         }
     }
 
+    // Босс выходит в самом конце волны, когда все обычные зомби уже заспавнены
+    if (state.inWave && state.zombiesToSpawn === 0 && state.bossPending) {
+        state.bossDelay -= dt;
+        if (state.bossDelay <= 0) {
+            state.bossPending = false;
+            spawnBoss();
+        }
+    }
+
     for (let i = state.zombies.length - 1; i >= 0; i--) {
         const z = state.zombies[i];
         const dir = new THREE.Vector3(-z.mesh.position.x, 0, -z.mesh.position.z);
 
         z.mesh.lookAt(0, 0, 0);
-        z.mesh.position.y = Math.abs(Math.sin(now * 0.008 + i)) * 0.08;
+        z.mesh.position.y = Math.abs(Math.sin(now * (z.bobSpeed || 0.008) + i)) * (z.bobAmp || 0.08);
         z.hpBarGroup.lookAt(camera.position);
 
-        const atFenceX = Math.abs(z.mesh.position.x) <= 4.75;
-        const atFenceZ = Math.abs(z.mesh.position.z) <= 4.75;
+        const fenceStop = z.fenceStop || 4.75;
+        const atFenceX = Math.abs(z.mesh.position.x) <= fenceStop;
+        const atFenceZ = Math.abs(z.mesh.position.z) <= fenceStop;
 
         if (!(atFenceX && atFenceZ)) {
             dir.normalize();
@@ -2222,7 +2467,7 @@ function animate(now) {
                 const dx = z.mesh.position.x - ob.x;
                 const dz = z.mesh.position.z - ob.z;
                 const d = Math.hypot(dx, dz);
-                const minD = ob.r + 0.32;
+                const minD = ob.r + (z.bodyR || 0.32);
                 if (d < minD && d > 0.001) {
                     const push = (minD - d) / d;
                     z.mesh.position.x += dx * push;
@@ -2230,7 +2475,7 @@ function animate(now) {
                 }
             }
         } else {
-            state.hp -= (7 + state.wave * 0.5) * dt;
+            state.hp -= (7 + state.wave * 0.5) * (z.dmgMult || 1) * dt;
             updateHUD();
             if (state.hp <= 0) {
                 triggerPerimeterBreach();
@@ -2274,11 +2519,11 @@ function animate(now) {
 
     for (let i = state.bullets.length - 1; i >= 0; i--) {
         const b = state.bullets[i];
-        const targetPos = b.target.mesh.position.clone().add(new THREE.Vector3(0, 0.78, 0));
+        const targetPos = b.target.mesh.position.clone().add(new THREE.Vector3(0, b.target.aimY || 0.78, 0));
         const dir = targetPos.sub(b.mesh.position);
         const dist = dir.length();
 
-        if (dist < 0.45 || b.target.hp <= 0) {
+        if (dist < (b.target.hitR || 0.45) || b.target.hp <= 0) {
             if (b.target.hp > 0) {
                 b.target.hp -= b.dmg;
                 const hpRatio = Math.max(0, b.target.hp / b.target.maxHp);
@@ -2306,8 +2551,9 @@ function animate(now) {
         }
     }
 
-    if (state.inWave && state.zombiesToSpawn === 0 && state.zombies.length === 0) {
+    if (state.inWave && state.zombiesToSpawn === 0 && !state.bossPending && state.zombies.length === 0) {
         state.inWave = false;
+        state.bossSpawned = false;
         state.wave += 1;
         state.scrap += Math.round(10 + state.wave * 2.5 + state.wave * state.wave * 0.08);
         saveGameProgress();
@@ -2317,7 +2563,7 @@ function animate(now) {
         const btn = document.getElementById('btn-battle');
         btn.classList.remove('opacity-50', 'pointer-events-none');
         btn.innerHTML = `<span>⚔️</span><span data-i18n="battle">${i18n[currentLang].battle}</span>`;
-        document.getElementById('wave-status').textContent = i18n[currentLang].prepPhase;
+        updateWaveStatus();
         playAtmosphericSound('click');
     }
 
@@ -2327,6 +2573,8 @@ function animate(now) {
 function triggerPerimeterBreach() {
     state.inWave = false;
     state.zombiesToSpawn = 0;
+    state.bossPending = false;
+    state.bossSpawned = false;
 
     state.zombies.forEach(z => scene.remove(z.mesh));
     state.bullets.forEach(b => scene.remove(b.mesh));
@@ -2364,6 +2612,7 @@ document.getElementById('btn-start').addEventListener('click', () => {
     document.getElementById('game-ui').classList.remove('hidden');
     document.getElementById('btn-open-wipe').classList.remove('hidden');
     updateHUD();
+    updateWaveStatus();
     playAtmosphericSound('click');
 });
 
@@ -2385,12 +2634,14 @@ document.getElementById('btn-retry-wave').addEventListener('click', () => {
     state.hp = state.maxHp;
     state.inWave = false;
     state.zombiesToSpawn = 0;
+    state.bossPending = false;
+    state.bossSpawned = false;
 
     document.getElementById('gameover-modal').classList.add('hidden');
     const btn = document.getElementById('btn-battle');
     btn.classList.remove('opacity-50', 'pointer-events-none');
     btn.innerHTML = `<span>⚔️</span><span data-i18n="battle">${i18n[currentLang].battle}</span>`;
-    document.getElementById('wave-status').textContent = i18n[currentLang].prepPhase;
+    updateWaveStatus();
 
     updateHUD();
     playAtmosphericSound('click');
@@ -2415,6 +2666,8 @@ document.getElementById('btn-confirm-wipe').addEventListener('click', () => {
     state.zombies = [];
     state.bullets = [];
     state.zombiesToSpawn = 0;
+    state.bossPending = false;
+    state.bossSpawned = false;
     state.wave = 1;
     state.scrap = 60;
     state.sawmillLevel = 0;
@@ -2443,7 +2696,7 @@ document.getElementById('btn-confirm-wipe').addEventListener('click', () => {
     const btn = document.getElementById('btn-battle');
     btn.classList.remove('opacity-50', 'pointer-events-none');
     btn.innerHTML = `<span>⚔️</span><span data-i18n="battle">${i18n[currentLang].battle}</span>`;
-    document.getElementById('wave-status').textContent = i18n[currentLang].prepPhase;
+    updateWaveStatus();
 
     saveGameProgress();
     updateHUD();
