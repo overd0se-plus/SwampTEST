@@ -1,0 +1,2612 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Swamp Perimeter">
+    <title>Swamp Perimeter: Outpost</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Игровые шрифты с поддержкой кириллицы: Russo One (заголовки/акценты) и Exo 2 (тактический UI) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@500;600;700;800&family=Russo+One&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body {
+            margin: 0;
+            background-color: #0b0f0d;
+            color: #d6dfd9;
+            font-family: 'Exo 2', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #game-wrapper {
+            position: relative;
+            width: 100%;
+            max-width: 430px;
+            height: 100vh;
+            max-height: 860px;
+            background: #141c18;
+            box-shadow: 0 0 60px rgba(0, 0, 0, 0.95);
+            overflow: hidden;
+            border-left: 1px solid #26332c;
+            border-right: 1px solid #26332c;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+            cursor: grab;
+        }
+        canvas:active {
+            cursor: grabbing;
+        }
+        canvas.can-interact {
+            cursor: pointer;
+        }
+        /* Выразительный игровой шрифт для заголовков, кнопок и счетчиков */
+        .font-military {
+            font-family: 'Russo One', sans-serif;
+            letter-spacing: 0.04em;
+        }
+        .font-tactical {
+            font-family: 'Exo 2', sans-serif;
+        }
+        ::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 19, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #3b4f44;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-wrapper">
+    <!-- 3D Сцена -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Верхняя панель (Ресурсы, Прогресс волны и Настройки) -->
+    <div class="absolute top-0 left-0 right-0 p-3 flex justify-between items-start pointer-events-none z-20" style="padding-top: calc(0.75rem + env(safe-area-inset-top));">
+        <!-- Статистика в бою -->
+        <div id="hud-stats" class="hidden flex-col gap-1.5 w-[195px] pointer-events-auto">
+            <div class="w-full bg-[#111915]/90 border border-[#2d3d34] px-3 py-1.5 rounded-xl backdrop-blur-md flex items-center justify-between shadow-lg">
+                <span class="text-amber-400 font-military text-sm flex items-center gap-1 tabular-nums">⚙️ <span id="scrap-val">60</span></span>
+                <span class="text-[#566b60] text-xs">|</span>
+                <span class="text-emerald-400 font-military text-sm flex items-center justify-end gap-1 tabular-nums min-w-[3.4rem]">🛡️ <span id="hp-val">100</span>%</span>
+            </div>
+            <div class="w-full bg-[#111915]/90 border border-[#2d3d34] px-3 py-1.5 rounded-xl backdrop-blur-md text-xs text-[#9cb3a6] font-tactical font-bold flex flex-col gap-1">
+                <div class="flex items-center justify-between gap-1.5">
+                    <span class="whitespace-nowrap"><span data-i18n="wave">ВОЛНА</span>: <span id="wave-val" class="text-white font-military tabular-nums">1</span></span>
+                    <span class="text-[#45594e]">•</span>
+                    <span id="wave-status" class="text-amber-400/90 truncate" data-i18n="prepPhase">Ожидание</span>
+                </div>
+                <!-- Прогресс-бар до конца волны -->
+                <div class="w-full h-1.5 bg-[#0a0f0c] rounded-full overflow-hidden border border-[#223029]">
+                    <div id="wave-progress-bar" class="h-full bg-gradient-to-r from-amber-500 to-emerald-400 transition-all duration-150" style="width: 100%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Единая кнопка настроек -->
+        <div class="relative ml-auto pointer-events-auto">
+            <button id="btn-settings" class="bg-[#16211c]/90 hover:bg-[#22332a] border border-[#32473c] text-[#c7d6cd] text-sm font-military px-3 py-2 rounded-xl transition shadow-md cursor-pointer">
+                ⚙️
+            </button>
+            <!-- Выпадающее меню настроек -->
+            <div id="settings-dropdown" class="hidden absolute right-0 mt-2 w-44 bg-[#111915]/95 border border-[#3b5246] rounded-xl p-2 shadow-2xl backdrop-blur-md flex flex-col gap-1.5">
+                <button id="btn-sound" class="w-full px-3 py-2 rounded-lg bg-[#18261f] hover:bg-[#22362c] border border-[#2d4237] text-[#d6dfd9] text-xs font-military flex justify-between items-center transition cursor-pointer">
+                    <span data-i18n="soundLabel">ЗВУК</span>
+                    <span id="sound-icon">🔊</span>
+                </button>
+                <button id="btn-whats-new" class="w-full px-3 py-2 rounded-lg bg-[#18261f] hover:bg-[#22362c] border border-[#2d4237] text-[#d6dfd9] text-xs font-military flex justify-between items-center transition cursor-pointer">
+                    <span>ЧТО НОВОГО?</span>
+                    <span>❓</span>
+                </button>
+                <button id="btn-lang" class="w-full px-3 py-2 rounded-lg bg-[#18261f] hover:bg-[#22362c] border border-[#2d4237] text-[#d6dfd9] text-xs font-military flex justify-between items-center transition cursor-pointer">
+                    <span data-i18n="langLabel">ЯЗЫК</span>
+                    <span id="lang-code" class="text-amber-400">RU</span>
+                </button>
+                <button id="btn-open-wipe" class="hidden w-full px-3 py-2 rounded-lg bg-[#2b1616] hover:bg-[#422020] border border-[#5e2c2c] text-red-300 text-xs font-military flex justify-between items-center transition cursor-pointer">
+                    <span data-i18n="resetBtn">СБРОС</span>
+                    <span>🔄</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ГЛАВНОЕ МЕНЮ -->
+    <div id="main-menu" class="absolute inset-0 bg-gradient-to-b from-[#0d1411]/85 via-[#131d18]/75 to-[#0a100d]/95 flex flex-col justify-between items-center p-8 z-30 backdrop-blur-[2px]">
+        <div class="mt-16 text-center">
+            <div class="inline-block px-3.5 py-1 mb-3 rounded-full bg-[#1e2c25] border border-[#384f43] text-[11px] tracking-widest text-[#8ba697] uppercase font-bold">
+                Tactical Outpost TD
+            </div>
+            <h1 class="font-military text-4xl tracking-wider text-[#e2ece6] drop-shadow-[0_4px_12px_rgba(0,0,0,0.85)] leading-tight">
+                SWAMP<br><span class="text-[#69967c]">DOSE</span>
+            </h1>
+            <p data-i18n="subtitle" class="mt-3 text-xs font-medium text-[#98b0a3] max-w-[260px] mx-auto leading-relaxed">
+                Удерживай периметр в сумерках. Нажимай на позиции внутри лагеря, чтобы расставлять бойцов.
+            </p>
+        </div>
+
+        <!-- Кнопка НАЧАТЬ по центру внизу -->
+        <div class="w-full mb-6 flex justify-center">
+            <button id="btn-start" class="w-4/5 py-4 bg-gradient-to-r from-[#365745] to-[#48705a] hover:from-[#436954] hover:to-[#56856a] active:scale-95 text-[#eff7f2] font-military text-lg tracking-widest rounded-xl border border-[#65967b]/50 shadow-[0_8px_25px_rgba(24,41,32,0.85)] transition cursor-pointer uppercase">
+                <span data-i18n="start">НАЧАТЬ</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- ИГРОВОЙ ИНТЕРФЕЙС (Кнопка "В БОЙ!" внизу экрана) -->
+    <div id="game-ui" class="hidden absolute inset-0 pointer-events-none flex flex-col justify-end pb-20 z-20">
+        <div class="flex flex-col items-center gap-2">
+            <button id="btn-battle" class="pointer-events-auto px-10 py-3.5 bg-gradient-to-b from-[#85512c] to-[#573218] hover:from-[#9c6036] hover:to-[#6e4020] active:scale-95 text-[#fcece0] font-military text-base tracking-wider rounded-2xl border border-[#c48354]/60 shadow-[0_8px_25px_rgba(0,0,0,0.85)] transition flex items-center gap-2.5 cursor-pointer">
+                <span>⚔️</span>
+                <span data-i18n="battle">В БОЙ!</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- ВСПЛЫВАЮЩЕЕ МЕНЮ ВОЗЛЕ ВЫБРАННОЙ ТОЧКИ -->
+    <div id="slot-modal" class="hidden absolute w-56 bg-[#111915]/95 border border-[#425e4f] rounded-xl p-2.5 z-30 shadow-[0_10px_30px_rgba(0,0,0,0.95)] backdrop-blur-md">
+        <div class="flex justify-between items-center mb-2 pb-1.5 border-b border-[#25362d]">
+            <div class="leading-tight">
+                <span class="text-[10px] uppercase tracking-wider text-[#789183] font-bold block" id="modal-slot-title">Позиция #1</span>
+                <h3 class="font-military text-xs text-[#e4efe8]" id="modal-unit-name">Свободная точка</h3>
+            </div>
+            <button id="btn-close-modal" class="w-6 h-6 rounded-md bg-[#1b2922] hover:bg-[#273b31] text-[#9cb3a6] flex items-center justify-center text-xs font-bold cursor-pointer">
+                ✕
+            </button>
+        </div>
+
+        <!-- Список бойцов для найма -->
+        <div id="modal-hire-list" class="flex flex-col gap-1.5 max-h-44 overflow-y-auto pr-1"></div>
+
+        <!-- Управление нанятым бойцом -->
+        <div id="modal-manage-view" class="hidden flex-col gap-2">
+            <div class="bg-[#17241e] border border-[#293d33] rounded-lg p-2 flex justify-between items-center text-[10px]">
+                <div>
+                    <div class="text-[#87a193] font-semibold" data-i18n="statsDmg">Урон / Темп</div>
+                    <div class="font-military text-xs text-white mt-0.5" id="manage-stats">8 DMG · 1.2/с</div>
+                </div>
+                <div class="text-right">
+                    <div class="text-[#87a193] font-semibold" data-i18n="statsRange">Дальность</div>
+                    <div class="font-military text-xs text-emerald-400 mt-0.5" id="manage-range">13 м</div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-1.5">
+                <button id="btn-upgrade-unit" class="py-1.5 px-2 rounded-lg font-military text-[10px] bg-[#395e4a] hover:bg-[#47755c] text-white transition flex flex-col items-center justify-center cursor-pointer shadow">
+                    <span data-i18n="upgradeBtn">УЛУЧШИТЬ</span>
+                    <span class="text-[10px] text-amber-300 mt-0.5" id="upgrade-cost-label">⚙️ 72</span>
+                    <span class="text-[8px] text-emerald-400 font-semibold mt-0.5 leading-tight text-center" id="upgrade-preview"></span>
+                </button>
+                <button id="btn-dismiss-unit" class="py-1.5 px-2 rounded-lg font-military text-[10px] bg-[#4a2626] hover:bg-[#613232] text-red-200 border border-red-900/50 transition flex flex-col items-center justify-center cursor-pointer">
+                    <span data-i18n="dismissBtn">УВОЛИТЬ</span>
+                    <span class="text-[10px] text-emerald-300 mt-0.5" id="dismiss-refund-label">+⚙️ 35</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Покупка заблокированной позиции -->
+        <div id="modal-unlock-view" class="hidden flex-col gap-2">
+            <p class="text-[11px] text-[#9cb3a6] leading-snug" data-i18n="unlockDesc">
+                Открыть дополнительную огневую точку внутри периметра.
+            </p>
+            <button id="btn-unlock-slot" class="w-full py-2 px-3 rounded-lg font-military text-xs bg-[#395e4a] hover:bg-[#47755c] text-white transition flex items-center justify-center gap-2 cursor-pointer shadow">
+                <span data-i18n="unlockBtn">ОТКРЫТЬ</span>
+                <span class="text-amber-300" id="unlock-cost-label">⚙️ 80</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Экран прорыва обороны (Переигровка текущей волны без потери бойцов и шестеренок) -->
+    <div id="gameover-modal" class="hidden absolute inset-0 bg-[#0a0f0c]/90 z-40 flex flex-col justify-center items-center p-6 text-center backdrop-blur-sm">
+        <div class="w-14 h-14 rounded-2xl bg-red-950/70 border border-red-700/50 flex items-center justify-center text-2xl mb-3 shadow-lg">
+            ⚠️
+        </div>
+        <h2 class="font-military text-2xl text-red-400 mb-2 tracking-wide" data-i18n="gameOver">ПЕРИМЕТР ПРОРВАН</h2>
+        <p class="text-xs font-medium text-[#a3b8ac] max-w-[270px] mb-6 leading-relaxed" data-i18n="breachDesc">
+            Забор разрушен, но отряд уцелел. Все бойцы и шестеренки сохранены — восстановите периметр и переиграйте волну!
+        </p>
+        <button id="btn-retry-wave" class="px-8 py-3.5 bg-gradient-to-r from-[#385947] to-[#48705a] hover:from-[#466e58] hover:to-[#56856a] active:scale-95 text-white font-military text-sm tracking-wider rounded-xl border border-[#5d8f73] shadow-lg transition cursor-pointer">
+            <span data-i18n="retryWave">ЕЩЕ РАЗ!</span>
+        </button>
+    </div>
+
+    <!-- Модальное окно полного сброса прогресса -->
+    <div id="wipe-modal" class="hidden absolute inset-0 bg-[#080c0a]/90 z-50 flex flex-col justify-center items-center p-6 text-center backdrop-blur-sm">
+        <div class="bg-[#121a16] border border-[#3d2626] rounded-2xl p-5 max-w-[300px] w-full shadow-2xl">
+            <h3 class="font-military text-lg text-red-400 mb-2" data-i18n="wipeTitle">ПОЛНЫЙ СБРОС?</h3>
+            <p class="text-xs text-[#9cb3a6] mb-5 leading-relaxed" data-i18n="wipeDesc">
+                Весь прогресс, нанятые бойцы, улучшения, шестеренки и пройденные волны будут полностью удалены.
+            </p>
+            <div class="grid grid-cols-2 gap-2.5">
+                <button id="btn-cancel-wipe" class="py-2.5 rounded-xl bg-[#1d2b24] hover:bg-[#283b32] text-[#c7d6cd] font-military text-xs border border-[#32473c] transition cursor-pointer">
+                    <span data-i18n="cancel">ОТМЕНА</span>
+                </button>
+                <button id="btn-confirm-wipe" class="py-2.5 rounded-xl bg-[#6e2626] hover:bg-[#8a3030] text-white font-military text-xs border border-red-500/40 transition cursor-pointer">
+                    <span data-i18n="confirmWipe">СБРОСИТЬ ВСЁ</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════ ЛЕСОПИЛКА: МОДАЛКА ═══════ -->
+    <div id="sawmill-modal" class="hidden absolute z-50 w-56 bg-[#111915]/95 border border-amber-500/50 rounded-xl p-3 shadow-2xl backdrop-blur-md flex flex-col gap-2">
+        <button id="btn-close-sawmill" class="absolute top-1.5 right-2 text-[#7d957f] hover:text-white text-lg leading-none cursor-pointer">✕</button>
+        <div class="font-military text-sm text-amber-300 flex items-center gap-1.5">
+            <span>🪵</span>
+            <span>ЛЕСОПИЛКА</span>
+        </div>
+        <div class="text-xs text-[#9cb3a6] font-tactical font-bold">Ур. <span id="sawmill-lvl-val" class="text-white">0</span></div>
+        <div class="text-[11px] text-[#8aa394]">Прочность забора: <span id="sawmill-defense-val" class="text-emerald-400 font-military">100%</span></div>
+        <button id="btn-upgrade-sawmill" class="w-full py-2 px-3 rounded-lg font-military text-xs transition flex flex-col items-center justify-center bg-[#395e4a] hover:bg-[#47755c] text-white cursor-pointer shadow">
+            <span id="sawmill-upg-label">ПОСТРОИТЬ</span>
+            <span class="text-[10px] text-amber-300 mt-0.5" id="sawmill-cost-label">⚙️ 100</span>
+            <span class="text-[8px] text-emerald-400 font-semibold mt-0.5" id="sawmill-preview"></span>
+        </button>
+    </div>
+</div>
+
+<script>
+// ==========================================
+// 1. ЛОКАЛИЗАЦИЯ (RU / EN) И РЕАЛИСТИЧНЫЙ ЗВУК ОРУЖИЯ
+// ==========================================
+const i18n = {
+    ru: {
+        subtitle: "Удерживай периметр в сумерках. Нажимай на позиции внутри лагеря, чтобы расставлять бойцов.",
+        dragHint: "↻ Вращай камеру свайпом · Нажимай на точки в лагере",
+        start: "НАЧАТЬ",
+        battle: "В БОЙ!",
+        inBattle: "ИДЕТ БОЙ...",
+        wave: "ВОЛНА",
+        prepPhase: "Ожидание",
+        combatPhase: "Оборона!",
+        slotTitle: "Позиция",
+        emptySlot: "Свободная позиция",
+        lockedSlot: "Закрытая точка",
+        unlockDesc: "Открыть дополнительную огневую точку внутри периметра.",
+        unlockBtn: "ОТКРЫТЬ",
+        soundLabel: "ЗВУК",
+        langLabel: "ЯЗЫК",
+        resetBtn: "СБРОС",
+        lvl: "Ур.",
+        statsDmg: "Урон / Темп",
+        statsRange: "Дальность",
+        upgradeBtn: "УЛУЧШИТЬ",
+        dismissBtn: "УВОЛИТЬ",
+        gameOver: "ПЕРИМЕТР ПРОРВАН",
+        breachDesc: "Забор разрушен, но отряд уцелел. Все бойцы и шестеренки сохранены — восстановите периметр и переиграйте волну!",
+        retryWave: "ЕЩЕ РАЗ!",
+        wipeTitle: "ПОЛНЫЙ СБРОС?",
+        wipeDesc: "Весь прогресс, нанятые бойцы, улучшения, шестеренки и волны будут полностью удалены.",
+        cancel: "ОТМЕНА",
+        confirmWipe: "СБРОСИТЬ ВСЁ"
+    },
+    en: {
+        subtitle: "Hold the dusk perimeter. Tap platforms inside the camp to deploy your fighters.",
+        dragHint: "↻ Drag to rotate camera · Tap platforms in camp",
+        start: "START",
+        battle: "TO BATTLE!",
+        inBattle: "IN COMBAT...",
+        wave: "WAVE",
+        prepPhase: "Standby",
+        combatPhase: "Defending!",
+        slotTitle: "Position",
+        emptySlot: "Empty Position",
+        lockedSlot: "Locked Position",
+        unlockDesc: "Unlock an additional firing position inside the perimeter.",
+        unlockBtn: "UNLOCK",
+        soundLabel: "SOUND",
+        langLabel: "LANG",
+        resetBtn: "RESET",
+        lvl: "Lvl",
+        statsDmg: "Damage / Rate",
+        statsRange: "Range",
+        upgradeBtn: "UPGRADE",
+        dismissBtn: "DISMISS",
+        gameOver: "PERIMETER BREACHED",
+        breachDesc: "The fence fell, but your squad survived. All fighters and gears are kept — rebuild and retry this wave!",
+        retryWave: "TRY AGAIN!",
+        wipeTitle: "FULL RESET?",
+        wipeDesc: "All progress, hired fighters, upgrades, gears, and waves will be completely wiped.",
+        cancel: "CANCEL",
+        confirmWipe: "WIPE ALL"
+    }
+};
+
+let currentLang = 'ru';
+let soundEnabled = true;
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+let audioUnlocked = false;
+function unlockAudio() {
+    if (audioUnlocked) return;
+    try {
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+        const buffer = audioCtx.createBuffer(1, 1, 22050);
+        const source = audioCtx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(audioCtx.destination);
+        source.start(0);
+        audioUnlocked = true;
+        startMusic();
+    } catch (e) {}
+}
+window.addEventListener('touchstart', unlockAudio, { passive: true });
+window.addEventListener('pointerdown', unlockAudio, { passive: true });
+
+let noiseBuffer = null;
+function getNoiseBuffer() {
+    if (noiseBuffer) return noiseBuffer;
+    const bufferSize = audioCtx.sampleRate * 0.6;
+    noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const data = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+    }
+    return noiseBuffer;
+}
+
+// ==========================================
+// АУДИО: мастер-шина, реверберация, выстрелы, музыка
+// ==========================================
+function makeImpulse(seconds, decay) {
+    const sr = audioCtx.sampleRate;
+    const len = Math.floor(sr * seconds);
+    const buf = audioCtx.createBuffer(2, len, sr);
+    for (let ch = 0; ch < 2; ch++) {
+        const d = buf.getChannelData(ch);
+        let lp = 0;
+        for (let i = 0; i < len; i++) {
+            const n = Math.random() * 2 - 1;
+            lp += (n - lp) * 0.35;
+            d[i] = lp * Math.pow(1 - i / len, decay);
+        }
+    }
+    return buf;
+}
+
+const MUSIC_VOLUME = 0.5;
+
+const masterGain = audioCtx.createGain();
+masterGain.gain.value = 0.85;
+const masterComp = audioCtx.createDynamicsCompressor();
+masterComp.threshold.value = -16;
+masterComp.knee.value = 18;
+masterComp.ratio.value = 4;
+masterComp.attack.value = 0.004;
+masterComp.release.value = 0.2;
+masterGain.connect(masterComp);
+masterComp.connect(audioCtx.destination);
+
+const sfxBus = audioCtx.createGain();
+sfxBus.connect(masterGain);
+const musicBus = audioCtx.createGain();
+musicBus.gain.value = 0;
+musicBus.connect(masterGain);
+
+const sfxReverbIn = audioCtx.createGain();
+const sfxReverb = audioCtx.createConvolver();
+sfxReverb.buffer = makeImpulse(1.8, 3.0);
+const sfxReverbOut = audioCtx.createGain();
+sfxReverbOut.gain.value = 0.55;
+sfxReverbIn.connect(sfxReverb);
+sfxReverb.connect(sfxReverbOut);
+sfxReverbOut.connect(masterGain);
+
+function noiseNode(t, len) {
+    const src = audioCtx.createBufferSource();
+    src.buffer = getNoiseBuffer();
+    src.start(t, Math.random() * 0.15);
+    src.stop(t + len + 0.03);
+    return src;
+}
+function envGain(t, peak, len) {
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(peak, t + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    return g;
+}
+
+const WEAPON_SND = {
+    0: { crackF: 1800, crackLen: 0.035, crackVol: 0.30, bodyF: 3200, bodyE: 700, bodyLen: 0.09, bodyVol: 0.22, thF0: 170, thF1: 90, thLen: 0.06, thVol: 0.12, send: 0.25 },
+    1: { crackF: 900,  crackLen: 0.03,  crackVol: 0.10, bodyF: 1600, bodyE: 350, bodyLen: 0.11, bodyVol: 0.22, thF0: 140, thF1: 70, thLen: 0.08, thVol: 0.12, send: 0.20 },
+    2: { crackF: 1200, crackLen: 0.025, crackVol: 0.10, bodyF: 1900, bodyE: 400, bodyLen: 0.07, bodyVol: 0.18, thF0: 150, thF1: 80, thLen: 0.05, thVol: 0.09, send: 0.15 },
+    3: { crackF: 1500, crackLen: 0.05,  crackVol: 0.34, bodyF: 3000, bodyE: 450, bodyLen: 0.15, bodyVol: 0.26, thF0: 130, thF1: 60, thLen: 0.09, thVol: 0.16, send: 0.35 },
+    4: { crackF: 1200, crackLen: 0.05,  crackVol: 0.38, bodyF: 2400, bodyE: 300, bodyLen: 0.18, bodyVol: 0.30, thF0: 110, thF1: 50, thLen: 0.12, thVol: 0.26, send: 0.40 },
+    5: { crackF: 1800, crackLen: 0.06,  crackVol: 0.40, bodyF: 3600, bodyE: 500, bodyLen: 0.22, bodyVol: 0.24, thF0: 100, thF1: 55, thLen: 0.14, thVol: 0.18, send: 0.60 },
+    6: { crackF: 1000, crackLen: 0.08,  crackVol: 0.50, bodyF: 2600, bodyE: 180, bodyLen: 0.40, bodyVol: 0.38, thF0: 85,  thF1: 35, thLen: 0.30, thVol: 0.45, send: 0.80 },
+    shotgun: { crackF: 800, crackLen: 0.06, crackVol: 0.45, bodyF: 2000, bodyE: 200, bodyLen: 0.25, bodyVol: 0.38, thF0: 100, thF1: 40, thLen: 0.20, thVol: 0.35, send: 0.50 }
+};
+const lastShotTime = {};
+
+function fireSound(key) {
+    if (!soundEnabled) return;
+    const p = WEAPON_SND[key] || WEAPON_SND[6];
+    try {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
+        if (now - (lastShotTime[key] || 0) < 0.035) return;
+        lastShotTime[key] = now;
+
+        const r = 0.92 + Math.random() * 0.16;
+        const v = 0.9 + Math.random() * 0.2;
+        const out = audioCtx.createGain();
+        out.gain.value = v;
+        out.connect(sfxBus);
+        const send = audioCtx.createGain();
+        send.gain.value = p.send;
+        out.connect(send);
+        send.connect(sfxReverbIn);
+
+        const crack = noiseNode(now, p.crackLen);
+        const hp = audioCtx.createBiquadFilter();
+        hp.type = 'highpass';
+        hp.frequency.value = p.crackF * r;
+        crack.connect(hp);
+        hp.connect(envGain(now, p.crackVol, p.crackLen)).connect(out);
+
+        const body = noiseNode(now, p.bodyLen);
+        const lp = audioCtx.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.Q.value = 0.7;
+        lp.frequency.setValueAtTime(p.bodyF * r, now);
+        lp.frequency.exponentialRampToValueAtTime(p.bodyE * r, now + p.bodyLen);
+        body.connect(lp);
+        lp.connect(envGain(now, p.bodyVol, p.bodyLen)).connect(out);
+
+        const th = audioCtx.createOscillator();
+        th.type = 'sine';
+        th.frequency.setValueAtTime(p.thF0 * r, now);
+        th.frequency.exponentialRampToValueAtTime(p.thF1 * r, now + p.thLen);
+        th.connect(envGain(now, p.thVol, p.thLen)).connect(out);
+        th.start(now);
+        th.stop(now + p.thLen + 0.03);
+    } catch (e) {}
+}
+
+function playWeaponShot(weaponId) {
+    fireSound(weaponId);
+}
+
+function playAtmosphericSound(kind) {
+    if (!soundEnabled) return;
+    try {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
+
+        if (kind === 'click') {
+            const osc = audioCtx.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(360, now);
+            osc.frequency.exponentialRampToValueAtTime(190, now + 0.05);
+            osc.connect(envGain(now, 0.05, 0.06)).connect(sfxBus);
+            osc.start(now);
+            osc.stop(now + 0.07);
+        } else if (kind === 'horn') {
+            const out = audioCtx.createGain();
+            out.connect(sfxBus);
+            const send = audioCtx.createGain();
+            send.gain.value = 0.6;
+            out.connect(send);
+            send.connect(sfxReverbIn);
+            const lp = audioCtx.createBiquadFilter();
+            lp.type = 'lowpass';
+            lp.frequency.value = 420;
+            lp.connect(out);
+            [[110, 0.07], [164.8, 0.035], [110.6, 0.05]].forEach(([f, vol]) => {
+                const o = audioCtx.createOscillator();
+                o.type = 'triangle';
+                o.frequency.setValueAtTime(f, now);
+                o.frequency.linearRampToValueAtTime(f * 0.9, now + 1.0);
+                const g = audioCtx.createGain();
+                g.gain.setValueAtTime(0.0001, now);
+                g.gain.linearRampToValueAtTime(vol, now + 0.3);
+                g.gain.exponentialRampToValueAtTime(0.0001, now + 1.2);
+                o.connect(g);
+                g.connect(lp);
+                o.start(now);
+                o.stop(now + 1.25);
+            });
+        } else if (kind === 'zombieHit') {
+            if (now - (lastShotTime.zhit || 0) < 0.05) return;
+            lastShotTime.zhit = now;
+            const r = 0.9 + Math.random() * 0.25;
+            const n = noiseNode(now, 0.08);
+            const lp = audioCtx.createBiquadFilter();
+            lp.type = 'lowpass';
+            lp.frequency.value = 450 * r;
+            n.connect(lp);
+            lp.connect(envGain(now, 0.07, 0.08)).connect(sfxBus);
+            const osc = audioCtx.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(115 * r, now);
+            osc.frequency.exponentialRampToValueAtTime(45, now + 0.08);
+            osc.connect(envGain(now, 0.05, 0.09)).connect(sfxBus);
+            osc.start(now);
+            osc.stop(now + 0.1);
+        }
+    } catch (e) {}
+}
+
+// ===== ФОНОВАЯ МУЗЫКА =====
+const musicRevIn = audioCtx.createGain();
+const musicRev = audioCtx.createConvolver();
+musicRev.buffer = makeImpulse(3.6, 2.4);
+const musicRevOut = audioCtx.createGain();
+musicRevOut.gain.value = 0.7;
+musicRevIn.connect(musicRev);
+musicRev.connect(musicRevOut);
+musicRevOut.connect(musicBus);
+
+const noteBus = audioCtx.createGain();
+noteBus.connect(musicBus);
+const noteRevSend = audioCtx.createGain();
+noteRevSend.gain.value = 0.6;
+noteBus.connect(noteRevSend);
+noteRevSend.connect(musicRevIn);
+const echo = audioCtx.createDelay(1.5);
+echo.delayTime.value = 0.52;
+const echoFb = audioCtx.createGain();
+echoFb.gain.value = 0.32;
+const echoLp = audioCtx.createBiquadFilter();
+echoLp.type = 'lowpass';
+echoLp.frequency.value = 1800;
+const echoSend = audioCtx.createGain();
+echoSend.gain.value = 0.45;
+noteBus.connect(echoSend);
+echoSend.connect(echo);
+echo.connect(echoLp);
+echoLp.connect(echoFb);
+echoFb.connect(echo);
+echoLp.connect(musicBus);
+echoLp.connect(musicRevIn);
+
+const padBus = audioCtx.createGain();
+padBus.connect(musicBus);
+const padRevSend = audioCtx.createGain();
+padRevSend.gain.value = 0.5;
+padBus.connect(padRevSend);
+padRevSend.connect(musicRevIn);
+
+const CHORD_LEN = 8;
+const CHORDS = [
+    [110.00, 164.81, 220.00, 261.63, 329.63],
+    [87.31, 130.81, 174.61, 220.00, 261.63],
+    [130.81, 196.00, 261.63, 329.63, 392.00],
+    [98.00, 146.83, 196.00, 246.94, 293.66]
+];
+const MELODY_NOTES = [440.00, 523.25, 587.33, 659.25, 783.99, 880.00];
+
+function padVoice(freq, t, dur, vol) {
+    const lp = audioCtx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.Q.value = 0.3;
+    lp.frequency.setValueAtTime(500, t);
+    lp.frequency.linearRampToValueAtTime(950, t + dur * 0.5);
+    lp.frequency.linearRampToValueAtTime(500, t + dur);
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(vol, t + 3.0);
+    g.gain.setValueAtTime(vol, t + dur - 3.5);
+    g.gain.linearRampToValueAtTime(0.0001, t + dur);
+    lp.connect(g);
+    g.connect(padBus);
+    [['triangle', -6], ['sine', 5]].forEach(([type, cents]) => {
+        const o = audioCtx.createOscillator();
+        o.type = type;
+        o.frequency.value = freq;
+        o.detune.value = cents;
+        o.connect(lp);
+        o.start(t);
+        o.stop(t + dur + 0.1);
+    });
+}
+
+function melodyNote(freq, t) {
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.035, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 3.0);
+    g.connect(noteBus);
+    const o = audioCtx.createOscillator();
+    o.type = 'sine';
+    o.frequency.value = freq;
+    o.connect(g);
+    o.start(t);
+    o.stop(t + 3.1);
+    const o2 = audioCtx.createOscillator();
+    o2.type = 'triangle';
+    o2.frequency.value = freq * 2;
+    const g2 = audioCtx.createGain();
+    g2.gain.value = 0.25;
+    o2.connect(g2);
+    g2.connect(g);
+    o2.start(t);
+    o2.stop(t + 3.1);
+}
+
+let chordIdx = 0;
+let nextChordTime = 0;
+let lastMelodyIdx = -1;
+function scheduleChord(t) {
+    const chord = CHORDS[chordIdx % CHORDS.length];
+    chordIdx++;
+    chord.forEach((f, i) => padVoice(f, t, CHORD_LEN + 3, i === 0 ? 0.03 : 0.016));
+    const count = 2 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < count; i++) {
+        let idx;
+        do { idx = Math.floor(Math.random() * MELODY_NOTES.length); } while (idx === lastMelodyIdx);
+        lastMelodyIdx = idx;
+        melodyNote(MELODY_NOTES[idx], t + 1 + Math.random() * (CHORD_LEN - 2));
+    }
+}
+
+let musicStarted = false;
+function startMusic() {
+    if (musicStarted) return;
+    musicStarted = true;
+    try {
+        const sr = audioCtx.sampleRate;
+        const wbuf = audioCtx.createBuffer(1, sr * 6, sr);
+        const wd = wbuf.getChannelData(0);
+        let last = 0;
+        for (let i = 0; i < wd.length; i++) {
+            last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+            wd[i] = last * 3.5;
+        }
+        const wind = audioCtx.createBufferSource();
+        wind.buffer = wbuf;
+        wind.loop = true;
+        const wbp = audioCtx.createBiquadFilter();
+        wbp.type = 'bandpass';
+        wbp.frequency.value = 380;
+        wbp.Q.value = 0.7;
+        const wg = audioCtx.createGain();
+        wg.gain.value = 0.03;
+        const lfo = audioCtx.createOscillator();
+        lfo.frequency.value = 0.06;
+        const lfoGain = audioCtx.createGain();
+        lfoGain.gain.value = 0.018;
+        lfo.connect(lfoGain);
+        lfoGain.connect(wg.gain);
+        wind.connect(wbp);
+        wbp.connect(wg);
+        wg.connect(musicBus);
+        wind.start();
+        lfo.start();
+
+        nextChordTime = audioCtx.currentTime + 0.3;
+        setInterval(musicTick, 400);
+        musicTick();
+    } catch (e) {}
+}
+
+function musicTick() {
+    try {
+        const now = audioCtx.currentTime;
+        const inWave = (typeof state !== 'undefined') && state.inWave;
+        const target = soundEnabled ? MUSIC_VOLUME * (inWave ? 0.6 : 1) : 0;
+        musicBus.gain.setTargetAtTime(target, now, 0.8);
+        if (!soundEnabled || audioCtx.state !== 'running') return;
+        if (nextChordTime < now) nextChordTime = now + 0.1;
+        while (nextChordTime < now + 2.5) {
+            scheduleChord(nextChordTime);
+            nextChordTime += CHORD_LEN;
+        }
+    } catch (e) {}
+}
+
+document.addEventListener('visibilitychange', () => {
+    try {
+        if (document.hidden) audioCtx.suspend();
+        else if (soundEnabled) audioCtx.resume();
+    } catch (e) {}
+});
+
+function updateLanguage() {
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (i18n[currentLang][key]) {
+            el.textContent = i18n[currentLang][key];
+        }
+    });
+    document.getElementById('lang-code').textContent = currentLang.toUpperCase();
+    document.getElementById('wave-status').textContent = state.inWave 
+        ? i18n[currentLang].combatPhase 
+        : i18n[currentLang].prepPhase;
+
+    const battleBtn = document.getElementById('btn-battle');
+    if (state.inWave) {
+        battleBtn.innerHTML = `<span>⏳</span><span>${i18n[currentLang].inBattle}</span>`;
+    } else {
+        battleBtn.innerHTML = `<span>⚔️</span><span data-i18n="battle">${i18n[currentLang].battle}</span>`;
+    }
+
+    if (selectedSlotId !== null) {
+        openSlotModal(selectedSlotId);
+    }
+}
+
+// ==========================================
+// 2. ТИПЫ БОЙЦОВ, ПОЗИЦИИ И СОХРАНЕНИЕ ПРОГРЕССА
+// ==========================================
+const STORAGE_KEY = 'swamp_perimeter_save_v1';
+
+const WEAPON_TYPES = [
+    { typeId: 0, name: "Glock-18", baseCost: 50,   upgBase: 15,   upgMult: 1.58, baseDmg: 8,   fireRate: 1.15, range: 13, color: 0x5c6e63 },
+    { typeId: 1, name: "USP-S",    baseCost: 160,  upgBase: 40,   upgMult: 1.55, baseDmg: 12,  fireRate: 1.10, range: 17, color: 0x46594e },
+    { typeId: 2, name: "MP5-SD",   baseCost: 420,  upgBase: 85,   upgMult: 1.52, baseDmg: 8,   fireRate: 2.9,  range: 16, color: 0x3d5442 },
+    { typeId: 3, name: "Galil AR", baseCost: 1100, upgBase: 150,  upgMult: 1.45, baseDmg: 21,  fireRate: 2.0,  range: 21, color: 0x736343 },
+    { typeId: 4, name: "AK-47",    baseCost: 2800, upgBase: 360,  upgMult: 1.48, baseDmg: 42,  fireRate: 1.7,  range: 23, color: 0x7d4934 },
+    { typeId: 5, name: "SSG-08",   baseCost: 6500, upgBase: 820,  upgMult: 1.50, baseDmg: 125, fireRate: 0.80, range: 31, color: 0x455d6b },
+    { typeId: 6, name: "AWP",      baseCost: 15000,upgBase: 1850, upgMult: 1.52, baseDmg: 1000, fireRate: 0.45, range: 38, color: 0x3b5737 },
+    { typeId: 7, name: "XM-1014",  baseCost: 4800, upgBase: 720,   upgMult: 1.50, baseDmg: 80,  fireRate: 0.85, range: 8,  color: 0x3c4a52, shotgun: true }
+];
+
+const SPAWN_POSITIONS = [
+    [-3.1, -3.1],
+    [3.1, -3.1],
+    [-3.1, 3.1],
+    [3.1, 3.1],
+    [0, -3.4],
+    [-3.4, 0],
+    [3.4, 0]
+];
+
+const SLOT_UNLOCK_COSTS = [0, 0, 90, 260, 680, 1750, 4500];
+
+const state = {
+    started: false,
+    inWave: false,
+    wave: 1,
+    scrap: 60,
+    sawmillLevel: 0,
+    sawmillMesh: null,
+    sawmillHitMesh: null,
+    sawmillRingMesh: null,
+    sawmillRingMat: null,
+    sawmillBadgeGroup: null,
+    sawmillBladeMesh: null,
+    sawmillExtraLogs: [],
+    sawmillPulseTimer: 0,
+    hp: 100,
+    maxHp: 100,
+    waveTotalZombies: 0,
+    zombiesToSpawn: 0,
+    spawnTimer: 0,
+    zombies: [],
+    bullets: [],
+    slots: SPAWN_POSITIONS.map((pos, idx) => ({
+        id: idx,
+        pos,
+        unlocked: idx < 2,
+        unlockCost: SLOT_UNLOCK_COSTS[idx] || 5000,
+        unitType: null,
+        level: 0,
+        totalSpent: 0,
+        cooldown: 0,
+        padMesh: null,
+        ringMesh: null,
+        plusGroup: null,
+        unitGroup: null
+    }))
+};
+
+let selectedSlotId = null;
+let sawmillHovered = false;
+let sawmillModalOpen = false;
+
+function refreshSawmillVisuals() {
+    if (state.sawmillExtraLogs && state.sawmillExtraLogs.length > 0) {
+        state.sawmillExtraLogs.forEach((log, idx) => {
+            log.visible = state.sawmillLevel > idx;
+        });
+    }
+    if (state.sawmillRingMat) {
+        if (state.sawmillLevel > 0) {
+            state.sawmillRingMat.color.setHex(0x4ade80);
+        } else {
+            state.sawmillRingMat.color.setHex(0xf59e0b);
+        }
+    }
+}
+
+function saveGameProgress() {
+    try {
+        const data = {
+            wave: state.wave,
+            scrap: state.scrap,
+            sawmillLevel: state.sawmillLevel,
+            slots: state.slots.map(s => ({
+                unlocked: s.unlocked,
+                typeId: s.unitType ? s.unitType.typeId : null,
+                level: s.level,
+                totalSpent: s.totalSpent
+            }))
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch (e) {}
+}
+
+function loadGameProgress() {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        if (typeof data.wave === 'number') state.wave = Math.max(1, data.wave);
+        if (typeof data.scrap === 'number') state.scrap = Math.max(0, data.scrap);
+        if (typeof data.sawmillLevel === 'number') state.sawmillLevel = Math.max(0, data.sawmillLevel);
+        applySawmillToFence();
+        refreshSawmillVisuals();
+
+        if (Array.isArray(data.slots)) {
+            data.slots.forEach((savedSlot, idx) => {
+                const slot = state.slots[idx];
+                if (!slot) return;
+                slot.unlocked = idx < 2 || savedSlot.unlocked === true;
+                if (slot.plusGroup) {
+                    slot.plusGroup.visible = !slot.unlocked;
+                }
+                if (savedSlot.typeId !== null && WEAPON_TYPES[savedSlot.typeId]) {
+                    slot.unlocked = true;
+                    if (slot.plusGroup) slot.plusGroup.visible = false;
+                    const weaponCfg = WEAPON_TYPES[savedSlot.typeId];
+                    slot.unitType = weaponCfg;
+                    slot.level = Math.max(1, savedSlot.level || 1);
+                    slot.totalSpent = savedSlot.totalSpent || weaponCfg.baseCost;
+
+                    const mesh = createFighterMesh(weaponCfg);
+                    const scale = 1 + Math.min(0.32, (slot.level - 1) * 0.02);
+                    mesh.scale.set(scale, scale, scale);
+                    slot.padMesh.add(mesh);
+                    slot.unitGroup = mesh;
+                    slot.ringMesh.material.color.setHex(0x4ade80);
+                } else {
+                    slot.ringMesh.material.color.setHex(slot.unlocked ? 0x6ba383 : 0xd97706);
+                }
+            });
+        }
+    } catch (e) {}
+}
+
+// ==========================================
+// 3. НАСТРОЙКА 3D СЦЕНЫ (THREE.JS)
+// ==========================================
+const canvas = document.getElementById('gameCanvas');
+const wrapper = document.getElementById('game-wrapper');
+const scene = new THREE.Scene();
+
+const fogColor = 0x16211c;
+scene.background = new THREE.Color(fogColor);
+scene.fog = new THREE.FogExp2(fogColor, 0.020);
+
+const camera = new THREE.PerspectiveCamera(45, wrapper.clientWidth / wrapper.clientHeight, 0.1, 120);
+let camAngle = Math.PI / 4;
+let camZoom = 1.0;
+
+function updateCameraPosition() {
+    const r = 15.5 * camZoom;
+    const h = 14.5 * camZoom;
+    camera.position.x = Math.sin(camAngle) * r;
+    camera.position.z = Math.cos(camAngle) * r;
+    camera.position.y = h;
+    camera.lookAt(0, 0.5, 0);
+}
+updateCameraPosition();
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setSize(wrapper.clientWidth, wrapper.clientHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const ambientLight = new THREE.HemisphereLight(0x709180, 0x223028, 1.2);
+scene.add(ambientLight);
+
+const dirLight = new THREE.DirectionalLight(0xc2dbcc, 0.95);
+dirLight.position.set(10, 18, 12);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.width = 1024;
+dirLight.shadow.mapSize.height = 1024;
+scene.add(dirLight);
+
+const baseLight = new THREE.PointLight(0xe09f56, 1.4, 15);
+baseLight.position.set(0, 2.2, 1.6);
+scene.add(baseLight);
+
+// ==========================================
+// 4. ПОСТРОЕНИЕ БАЗЫ, ПАЛАТКИ, ЛЕСОПИЛКИ И ПОЗИЦИЙ
+// ==========================================
+const clickablePads = [];
+
+function createWeaponMesh(weaponCfg) {
+    const g = new THREE.Group();
+    const bodyMat = new THREE.MeshStandardMaterial({ color: weaponCfg.color || 0x141715, metalness: 0.55, roughness: 0.45, flatShading: true });
+    const metalMat = new THREE.MeshStandardMaterial({ color: 0x23282b, metalness: 0.7, roughness: 0.35 });
+    const woodMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2c, roughness: 0.85, flatShading: true });
+    const t = weaponCfg.typeId;
+    const isPistol = t <= 1;
+    const isSniper = t >= 5;
+    const isShotgun = t === 7;
+
+    const barrelLen = isPistol ? 0.16 : (isSniper ? 0.62 : (isShotgun ? 0.5 : 0.42));
+    const barrelR = isShotgun ? 0.036 : 0.022;
+    const barrelGeo = new THREE.CylinderGeometry(barrelR, barrelR, barrelLen, 8);
+    barrelGeo.rotateX(Math.PI / 2);
+    const barrel = new THREE.Mesh(barrelGeo, metalMat);
+    barrel.position.set(0, 0, barrelLen * 0.5);
+    g.add(barrel);
+
+    if (t === 1 || t === 2) {
+        const silGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.2, 8);
+        silGeo.rotateX(Math.PI / 2);
+        const sil = new THREE.Mesh(silGeo, metalMat);
+        sil.position.set(0, 0, barrelLen + 0.08);
+        g.add(sil);
+    }
+
+    const bodyLen = isPistol ? 0.16 : 0.4;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.07, isPistol ? 0.1 : 0.13, bodyLen), bodyMat);
+    body.position.set(0, 0, barrelLen * 0.4);
+    g.add(body);
+
+    if (!isPistol && t !== 5 && t !== 6) {
+        const mag = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.16, 0.08), metalMat);
+        mag.position.set(0, -0.12, barrelLen * 0.25);
+        mag.rotation.x = -0.12;
+        g.add(mag);
+    }
+
+    if (isShotgun) {
+        const pumpGeo = new THREE.CylinderGeometry(0.046, 0.046, 0.16, 8);
+        pumpGeo.rotateX(Math.PI / 2);
+        const pump = new THREE.Mesh(pumpGeo, bodyMat);
+        pump.position.set(0, -0.03, barrelLen * 0.55);
+        g.add(pump);
+    }
+
+    if (!isPistol) {
+        const stockLen = 0.22;
+        const stock = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.11, stockLen), (t === 3 || t === 4) ? woodMat : bodyMat);
+        stock.position.set(0, -0.02, -stockLen * 0.5);
+        g.add(stock);
+
+        const grip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.14, 0.07), (t === 3 || t === 4) ? woodMat : bodyMat);
+        grip.position.set(0, -0.1, -0.02);
+        grip.rotation.x = 0.25;
+        g.add(grip);
+    }
+
+    if (isSniper) {
+        const scopeGeo = new THREE.CylinderGeometry(0.035, 0.035, 0.26, 8);
+        scopeGeo.rotateX(Math.PI / 2);
+        const scope = new THREE.Mesh(scopeGeo, metalMat);
+        scope.position.set(0, 0.09, 0.08);
+        g.add(scope);
+    }
+
+    const sight = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.03, 0.02), metalMat);
+    sight.position.set(0, barrelR + 0.015, barrelLen * 0.9);
+    g.add(sight);
+
+    const muzzle = new THREE.Mesh(
+        new THREE.SphereGeometry(0.06, 6, 6),
+        new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0 })
+    );
+    muzzle.position.set(0, 0, barrelLen + 0.06);
+    g.add(muzzle);
+    g.userData.muzzle = muzzle;
+
+    const zOff = isPistol ? 0.25 : 0.25 + (isSniper ? 0.55 : (isShotgun ? 0.42 : 0.35));
+    g.position.set(0.12, 0.8, zOff);
+    return g;
+}
+
+function createFighterMesh(weaponCfg) {
+    const unitGroup = new THREE.Group();
+
+    const legMat = new THREE.MeshStandardMaterial({ color: 0x222924, flatShading: true });
+    const legGeo = new THREE.BoxGeometry(0.16, 0.45, 0.18);
+    const leftLeg = new THREE.Mesh(legGeo, legMat);
+    leftLeg.position.set(-0.12, 0.22, 0);
+    const rightLeg = new THREE.Mesh(legGeo, legMat);
+    rightLeg.position.set(0.12, 0.22, 0);
+    unitGroup.add(leftLeg, rightLeg);
+
+    const bodyGeo = new THREE.BoxGeometry(0.46, 0.55, 0.28);
+    const bodyMat = new THREE.MeshStandardMaterial({ color: weaponCfg.color, flatShading: true });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.y = 0.7;
+    body.castShadow = true;
+    unitGroup.add(body);
+
+    const vestGeo = new THREE.BoxGeometry(0.49, 0.42, 0.32);
+    const vestMat = new THREE.MeshStandardMaterial({ color: 0x1c211e, flatShading: true });
+    const vest = new THREE.Mesh(vestGeo, vestMat);
+    vest.position.y = 0.72;
+    unitGroup.add(vest);
+
+    const headGeo = new THREE.BoxGeometry(0.32, 0.32, 0.32);
+    const headMat = new THREE.MeshStandardMaterial({ color: 0xc9a88d, flatShading: true });
+    const head = new THREE.Mesh(headGeo, headMat);
+    head.position.y = 1.15;
+    unitGroup.add(head);
+
+    const helmetGeo = new THREE.BoxGeometry(0.36, 0.18, 0.36);
+    const helmetMat = new THREE.MeshStandardMaterial({ color: 0x2d382f, flatShading: true });
+    const helmet = new THREE.Mesh(helmetGeo, helmetMat);
+    helmet.position.y = 1.26;
+    unitGroup.add(helmet);
+
+    const armGeo = new THREE.BoxGeometry(0.13, 0.13, 0.42);
+    const leftArm = new THREE.Mesh(armGeo, bodyMat);
+    leftArm.position.set(-0.24, 0.8, 0.2);
+    leftArm.rotation.y = 0.3;
+    const rightArm = new THREE.Mesh(armGeo, bodyMat);
+    rightArm.position.set(0.24, 0.8, 0.2);
+    rightArm.rotation.y = -0.2;
+    unitGroup.add(leftArm, rightArm);
+
+    unitGroup.add(createWeaponMesh(weaponCfg));
+
+    return unitGroup;
+}
+
+function createPlusSignMesh() {
+    const plusGroup = new THREE.Group();
+    const plusMat = new THREE.MeshBasicMaterial({ color: 0xfbbf24 });
+    const bar1 = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.08, 0.14), plusMat);
+    const bar2 = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.08, 0.55), plusMat);
+    plusGroup.add(bar1, bar2);
+    plusGroup.position.y = 0.22;
+    return plusGroup;
+}
+
+function buildMilitaryTent() {
+    const tentGroup = new THREE.Group();
+
+    const deckGeo = new THREE.BoxGeometry(2.6, 0.12, 3.0);
+    const deckMat = new THREE.MeshStandardMaterial({ color: 0x3b3127, flatShading: true });
+    const deck = new THREE.Mesh(deckGeo, deckMat);
+    deck.position.y = 0.12;
+    deck.receiveShadow = true;
+    tentGroup.add(deck);
+
+    const tentMat = new THREE.MeshStandardMaterial({ color: 0x3a4f41, roughness: 0.85, flatShading: true });
+    const roofMat = new THREE.MeshStandardMaterial({ color: 0x2f4235, roughness: 0.9, flatShading: true });
+
+    const wallsGeo = new THREE.BoxGeometry(2.3, 0.75, 2.7);
+    const walls = new THREE.Mesh(wallsGeo, tentMat);
+    walls.position.y = 0.52;
+    walls.castShadow = true;
+    walls.receiveShadow = true;
+    tentGroup.add(walls);
+
+    const roofGeo = new THREE.CylinderGeometry(1.38, 1.38, 2.85, 3);
+    roofGeo.rotateX(-Math.PI / 2);
+    const roof = new THREE.Mesh(roofGeo, roofMat);
+    roof.position.y = 1.25;
+    roof.scale.set(1, 0.65, 1);
+    roof.castShadow = true;
+    tentGroup.add(roof);
+
+    const doorGeo = new THREE.BoxGeometry(0.85, 0.95, 0.12);
+    const doorMat = new THREE.MeshStandardMaterial({ color: 0x161f1a, flatShading: true });
+    const door = new THREE.Mesh(doorGeo, doorMat);
+    door.position.set(0, 0.62, 1.34);
+    tentGroup.add(door);
+
+    const flapGeo = new THREE.BoxGeometry(0.28, 0.95, 0.18);
+    const leftFlap = new THREE.Mesh(flapGeo, tentMat);
+    leftFlap.position.set(-0.52, 0.62, 1.36);
+    leftFlap.rotation.y = -0.25;
+    const rightFlap = new THREE.Mesh(flapGeo, tentMat);
+    rightFlap.position.set(0.52, 0.62, 1.36);
+    rightFlap.rotation.y = 0.25;
+    tentGroup.add(leftFlap, rightFlap);
+
+    const crateMat = new THREE.MeshStandardMaterial({ color: 0x574835, flatShading: true });
+    const crate1 = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.35, 0.45), crateMat);
+    crate1.position.set(1.05, 0.32, 1.55);
+    crate1.rotation.y = 0.3;
+    crate1.castShadow = true;
+
+    const crate2 = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.28, 0.35), crateMat);
+    crate2.position.set(1.02, 0.63, 1.52);
+    crate2.rotation.y = -0.2;
+    tentGroup.add(crate1, crate2);
+
+    const lanternGeo = new THREE.BoxGeometry(0.16, 0.22, 0.16);
+    const lanternMat = new THREE.MeshBasicMaterial({ color: 0xf5b967 });
+    const lantern = new THREE.Mesh(lanternGeo, lanternMat);
+    lantern.position.set(0, 1.25, 1.48);
+    tentGroup.add(lantern);
+
+    scene.add(tentGroup);
+}
+
+const OBSTACLES = [];
+
+function buildSwampDecor() {
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3d3125, roughness: 0.9, flatShading: true });
+    const crownMat = new THREE.MeshStandardMaterial({ color: 0x2c4632, roughness: 0.9, flatShading: true });
+    const crownMat2 = new THREE.MeshStandardMaterial({ color: 0x253a2a, roughness: 0.9, flatShading: true });
+
+    let placed = 0, attempts = 0;
+    while (placed < 26 && attempts < 400) {
+        attempts++;
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 6.2 + Math.random() * 16;
+        const x = Math.cos(angle) * dist;
+        const z = Math.sin(angle) * dist;
+        if (OBSTACLES.some(o => Math.hypot(o.x - x, o.z - z) < 2.4)) continue;
+        const h = 2.2 + Math.random() * 2.2;
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16 + Math.random() * 0.1, 0.26, h, 6), trunkMat);
+        trunk.position.set(x, h / 2, z);
+        trunk.castShadow = true;
+        scene.add(trunk);
+        const crown = new THREE.Mesh(new THREE.ConeGeometry(0.9 + Math.random() * 0.6, 1.8 + Math.random() * 1.2, 7), Math.random() > 0.5 ? crownMat : crownMat2);
+        crown.position.set(x, h + 0.55, z);
+        crown.castShadow = true;
+        scene.add(crown);
+        OBSTACLES.push({ x, z, r: 0.36 });
+        placed++;
+    }
+
+    const puddleMat = new THREE.MeshStandardMaterial({ color: 0x14231f, roughness: 0.15, metalness: 0.35, flatShading: true });
+    const puddleSpots = [[-9.5, 7.2, 2.4, 1.6], [8.6, -6.8, 2.8, 1.8], [-7.4, -9.8, 2.0, 1.4]];
+    puddleSpots.forEach(([px, pz, rx, rz]) => {
+        const puddle = new THREE.Mesh(new THREE.CircleGeometry(1, 20), puddleMat);
+        puddle.scale.set(rx, rz, 1);
+        puddle.rotation.x = -Math.PI / 2;
+        puddle.position.set(px, 0.02, pz);
+        scene.add(puddle);
+    });
+
+    const grassMats = [0x35503a, 0x2c4632, 0x3e5a40].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.9, flatShading: true }));
+    for (let i = 0; i < 90; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 4.8 + Math.random() * 18;
+        const x = Math.cos(angle) * dist;
+        const z = Math.sin(angle) * dist;
+        if (puddleSpots.some(([px, pz, rx, rz]) => Math.abs(px - x) < rx + 0.3 && Math.abs(pz - z) < rz + 0.3)) continue;
+        const n = 2 + Math.floor(Math.random() * 3);
+        for (let j = 0; j < n; j++) {
+            const blade = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.3 + Math.random() * 0.3, 4), grassMats[Math.floor(Math.random() * grassMats.length)]);
+            blade.position.set(x + (Math.random() - 0.5) * 0.35, 0.18, z + (Math.random() - 0.5) * 0.35);
+            scene.add(blade);
+        }
+    }
+}
+
+// Лесопилка возле палатки с понятной подсветкой кликабельности
+function buildSawmill() {
+    const sawX = 1.95;
+    const sawZ = -0.2;
+
+    // Подсветка площадки лесопилки на полу
+    const groundPad = new THREE.Mesh(
+        new THREE.BoxGeometry(1.1, 0.06, 1.55),
+        new THREE.MeshStandardMaterial({ color: 0x334237, roughness: 0.8, flatShading: true })
+    );
+    groundPad.position.set(sawX, 0.16, sawZ);
+    groundPad.receiveShadow = true;
+    scene.add(groundPad);
+
+    const ringMat = new THREE.MeshBasicMaterial({
+        color: 0xf59e0b,
+        transparent: true,
+        opacity: 0.85,
+        side: THREE.DoubleSide
+    });
+    const ringMesh = new THREE.Mesh(new THREE.RingGeometry(0.72, 0.86, 24), ringMat);
+    ringMesh.rotation.x = -Math.PI / 2;
+    ringMesh.scale.set(0.85, 1.15, 1);
+    ringMesh.position.set(sawX, 0.2, sawZ);
+    scene.add(ringMesh);
+    state.sawmillRingMesh = ringMesh;
+    state.sawmillRingMat = ringMat;
+
+    const grp = new THREE.Group();
+    const woodMat = new THREE.MeshStandardMaterial({ color: 0x6b5035, roughness: 0.85, flatShading: true });
+    const trimMat = new THREE.MeshStandardMaterial({ color: 0x8c6842, roughness: 0.75, flatShading: true });
+    const sawRoofMat = new THREE.MeshStandardMaterial({ color: 0x3d5238, roughness: 0.85, flatShading: true });
+
+    const base = new THREE.Mesh(new THREE.BoxGeometry(1.65, 0.52, 1.25), woodMat);
+    base.position.y = 0.26;
+    base.castShadow = true;
+    grp.add(base);
+
+    // Опорные столбы и тёплый фонарь лесопилки
+    const postGeo = new THREE.BoxGeometry(0.12, 0.65, 0.12);
+    [[-0.72, 0.55], [0.72, 0.55], [-0.72, -0.55], [0.72, -0.55]].forEach(([px, pz]) => {
+        const post = new THREE.Mesh(postGeo, trimMat);
+        post.position.set(px, 0.52, pz);
+        post.castShadow = true;
+        grp.add(post);
+    });
+
+    const sawRoofGeo = new THREE.CylinderGeometry(1.02, 1.02, 1.78, 3);
+    sawRoofGeo.rotateX(-Math.PI / 2);
+    const sawRoof = new THREE.Mesh(sawRoofGeo, sawRoofMat);
+    sawRoof.position.y = 0.84;
+    sawRoof.scale.set(1, 0.55, 1);
+    sawRoof.castShadow = true;
+    grp.add(sawRoof);
+
+    // Пильный диск
+    const blade = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.32, 0.32, 0.05, 18),
+        new THREE.MeshStandardMaterial({ color: 0xb0bec5, metalness: 0.85, roughness: 0.25, emissive: 0x1d2923 })
+    );
+    blade.position.set(0, 0.62, 0.64);
+    blade.rotation.z = Math.PI / 2;
+    grp.add(blade);
+    state.sawmillBladeMesh = blade;
+
+    // Тёплый фонарь над входом в лесопилку
+    const lamp = new THREE.Mesh(
+        new THREE.BoxGeometry(0.16, 0.16, 0.16),
+        new THREE.MeshBasicMaterial({ color: 0xffca6b })
+    );
+    lamp.position.set(0, 1.08, 0.72);
+    grp.add(lamp);
+
+    // Штабель брёвен + дополнительные брёвна при прокачке
+    const logMat = new THREE.MeshStandardMaterial({ color: 0x7d5c3b, roughness: 0.9, flatShading: true });
+    state.sawmillExtraLogs = [];
+    for (let i = 0; i < 6; i++) {
+        const log = new THREE.Mesh(new THREE.CylinderGeometry(0.095, 0.095, 1.15, 8), logMat);
+        log.rotation.z = Math.PI / 2;
+        const isBaseLog = i < 3;
+        log.position.set(-0.95, 0.12 + Math.floor(i / 3) * 0.2, -0.35 + (i % 3) * 0.22);
+        log.castShadow = true;
+        if (!isBaseLog) {
+            log.visible = false;
+            state.sawmillExtraLogs.push(log);
+        }
+        grp.add(log);
+    }
+
+    grp.scale.setScalar(0.62);
+    grp.position.set(sawX, 0.18, sawZ);
+    grp.rotation.y = Math.PI / 2;
+    scene.add(grp);
+    state.sawmillMesh = grp;
+
+    // Плавающий маркер-указатель над лесопилкой
+    const badgeGroup = new THREE.Group();
+    badgeGroup.position.set(sawX, 1.48, sawZ);
+    const pill = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.24, 0.24, 0.08, 16),
+        new THREE.MeshBasicMaterial({ color: 0xfbbf24 })
+    );
+    pill.rotation.x = Math.PI / 2;
+    badgeGroup.add(pill);
+    const core = new THREE.Mesh(
+        new THREE.BoxGeometry(0.18, 0.18, 0.12),
+        new THREE.MeshBasicMaterial({ color: 0x1b261f })
+    );
+    core.position.z = 0.02;
+    badgeGroup.add(core);
+    scene.add(badgeGroup);
+    state.sawmillBadgeGroup = badgeGroup;
+
+    const hitMesh = new THREE.Mesh(new THREE.BoxGeometry(1.45, 1.55, 1.15), new THREE.MeshBasicMaterial({ visible: false }));
+    hitMesh.position.set(sawX, 0.72, sawZ);
+    hitMesh.rotation.y = Math.PI / 2;
+    scene.add(hitMesh);
+    state.sawmillHitMesh = hitMesh;
+
+    refreshSawmillVisuals();
+}
+
+function buildEnvironment() {
+    const groundGeo = new THREE.CylinderGeometry(38, 38, 1, 32);
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0x1d2b24, roughness: 0.9, flatShading: true });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.position.y = -0.5;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    const baseFloorGeo = new THREE.BoxGeometry(8.6, 0.2, 8.6);
+    const baseFloorMat = new THREE.MeshStandardMaterial({ color: 0x28342e, roughness: 0.8, flatShading: true });
+    const baseFloor = new THREE.Mesh(baseFloorGeo, baseFloorMat);
+    baseFloor.position.y = 0.05;
+    baseFloor.receiveShadow = true;
+    scene.add(baseFloor);
+
+    const fenceMat = new THREE.MeshStandardMaterial({ color: 0x453b32, roughness: 0.85, flatShading: true });
+    const postMat = new THREE.MeshStandardMaterial({ color: 0x2f3833, roughness: 0.7, flatShading: true });
+    const halfSize = 4.3;
+
+    for (let i = -halfSize; i <= halfSize; i += 2.15) {
+        [
+            [i, halfSize], [i, -halfSize],
+            [halfSize, i], [-halfSize, i]
+        ].forEach(([px, pz]) => {
+            const post = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.95, 0.25), postMat);
+            post.position.set(px, 0.45, pz);
+            post.castShadow = true;
+            scene.add(post);
+        });
+    }
+
+    const railH = new THREE.BoxGeometry(halfSize * 2, 0.14, 0.12);
+    const railV = new THREE.BoxGeometry(0.12, 0.14, halfSize * 2);
+    [0.35, 0.72].forEach(h => {
+        const r1 = new THREE.Mesh(railH, fenceMat); r1.position.set(0, h, halfSize);
+        const r2 = new THREE.Mesh(railH, fenceMat); r2.position.set(0, h, -halfSize);
+        const r3 = new THREE.Mesh(railV, fenceMat); r3.position.set(halfSize, h, 0);
+        const r4 = new THREE.Mesh(railV, fenceMat); r4.position.set(-halfSize, h, 0);
+        scene.add(r1, r2, r3, r4);
+    });
+
+    buildMilitaryTent();
+    buildSwampDecor();
+    buildSawmill();
+
+    const rockMat = new THREE.MeshStandardMaterial({ color: 0x27332d, flatShading: true });
+    for (let i = 0; i < 25; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 7.5 + Math.random() * 17;
+        const rockSize = 0.4 + Math.random() * 0.7;
+        const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(rockSize, 0), rockMat);
+        rock.position.set(Math.cos(angle) * dist, 0.2, Math.sin(angle) * dist);
+        rock.rotation.set(Math.random(), Math.random(), Math.random());
+        rock.castShadow = true;
+        scene.add(rock);
+        OBSTACLES.push({ x: rock.position.x, z: rock.position.z, r: rockSize * 0.8 });
+    }
+
+    state.slots.forEach(slot => {
+        const slotGroup = new THREE.Group();
+        slotGroup.position.set(slot.pos[0], 0.16, slot.pos[1]);
+
+        const padGeo = new THREE.CylinderGeometry(0.75, 0.85, 0.16, 6);
+        const padMat = new THREE.MeshStandardMaterial({ color: 0x3a4d43, flatShading: true });
+        const pad = new THREE.Mesh(padGeo, padMat);
+        pad.receiveShadow = true;
+        pad.userData = { slotId: slot.id };
+        slotGroup.add(pad);
+        clickablePads.push(pad);
+
+        const ringGeo = new THREE.RingGeometry(0.62, 0.74, 6);
+        ringGeo.rotateX(-Math.PI / 2);
+        const ringColor = slot.unlocked ? 0x6ba383 : 0xd97706;
+        const ringMat = new THREE.MeshBasicMaterial({ color: ringColor, side: THREE.DoubleSide });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.position.y = 0.09;
+        ring.userData = { slotId: slot.id };
+        slotGroup.add(ring);
+        clickablePads.push(ring);
+
+        const plusGroup = createPlusSignMesh();
+        plusGroup.visible = !slot.unlocked;
+        slotGroup.add(plusGroup);
+
+        const hitGeo = new THREE.CylinderGeometry(0.95, 0.95, 1.3, 8);
+        const hitMat = new THREE.MeshBasicMaterial({ visible: false });
+        const hitMesh = new THREE.Mesh(hitGeo, hitMat);
+        hitMesh.position.y = 0.6;
+        hitMesh.userData = { slotId: slot.id };
+        slotGroup.add(hitMesh);
+        clickablePads.push(hitMesh);
+
+        scene.add(slotGroup);
+        slot.padMesh = slotGroup;
+        slot.ringMesh = ring;
+        slot.plusGroup = plusGroup;
+    });
+}
+buildEnvironment();
+loadGameProgress();
+
+// ==========================================
+// 5. УПРАВЛЕНИЕ КАМЕРОЙ, ЗУМ И ПЕРЕСТАНОВКА БОЙЦОВ (DRAG & DROP)
+// ==========================================
+let isPointerDown = false;
+let pointerDownPos = { x: 0, y: 0 };
+let prevX = 0;
+
+let holdTimer = null;
+let draggingSlotId = null;
+let dragGhostMesh = null;
+let hoverTargetSlotId = null;
+
+const activeTouches = new Map();
+let initialPinchDist = null;
+let initialPinchZoom = 1.0;
+
+const raycaster = new THREE.Raycaster();
+const pointerNDC = new THREE.Vector2();
+const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.35);
+const dragIntersectPoint = new THREE.Vector3();
+
+function getSlotHitAt(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    pointerNDC.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    pointerNDC.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(pointerNDC, camera);
+    if (state.sawmillHitMesh) {
+        const sawHits = raycaster.intersectObject(state.sawmillHitMesh, false);
+        if (sawHits.length > 0) return 'sawmill';
+    }
+    const hits = raycaster.intersectObjects(clickablePads, false);
+    if (hits.length > 0) {
+        return hits[0].object.userData.slotId;
+    }
+    return null;
+}
+
+function startDraggingUnit(slotId, clientX, clientY) {
+    const slot = state.slots[slotId];
+    if (!slot || !slot.unitType || !slot.unitGroup) return;
+
+    draggingSlotId = slotId;
+    closeSlotModal();
+    playAtmosphericSound('click');
+
+    slot.unitGroup.visible = false;
+    dragGhostMesh = createFighterMesh(slot.unitType);
+    const scale = 1 + Math.min(0.32, (slot.level - 1) * 0.02);
+    dragGhostMesh.scale.set(scale * 1.08, scale * 1.08, scale * 1.08);
+    dragGhostMesh.position.set(slot.pos[0], 0.45, slot.pos[1]);
+    scene.add(dragGhostMesh);
+
+    updateDragGhostPosition(clientX, clientY);
+}
+
+function updateDragGhostPosition(clientX, clientY) {
+    if (draggingSlotId === null || !dragGhostMesh) return;
+    const rect = canvas.getBoundingClientRect();
+    pointerNDC.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    pointerNDC.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(pointerNDC, camera);
+
+    if (raycaster.ray.intersectPlane(dragPlane, dragIntersectPoint)) {
+        dragGhostMesh.position.set(dragIntersectPoint.x, 0.45, dragIntersectPoint.z);
+    }
+
+    const rawTargetId = getSlotHitAt(clientX, clientY);
+    const targetId = (rawTargetId === 'sawmill') ? null : rawTargetId;
+    hoverTargetSlotId = (targetId !== null && state.slots[targetId].unlocked) ? targetId : null;
+
+    state.slots.forEach(s => {
+        if (s.id === draggingSlotId) {
+            s.ringMesh.material.color.setHex(0xfbbf24);
+        } else if (s.id === hoverTargetSlotId) {
+            s.ringMesh.material.color.setHex(0x38bdf8);
+        } else if (s.unitType) {
+            s.ringMesh.material.color.setHex(0x4ade80);
+        } else {
+            s.ringMesh.material.color.setHex(s.unlocked ? 0x6ba383 : 0xd97706);
+        }
+    });
+}
+
+function finishDraggingUnit() {
+    if (draggingSlotId === null) return;
+    const fromSlot = state.slots[draggingSlotId];
+
+    if (dragGhostMesh) {
+        scene.remove(dragGhostMesh);
+        dragGhostMesh = null;
+    }
+    if (fromSlot.unitGroup) {
+        fromSlot.unitGroup.visible = true;
+    }
+
+    if (hoverTargetSlotId !== null && hoverTargetSlotId !== draggingSlotId) {
+        const toSlot = state.slots[hoverTargetSlotId];
+        if (toSlot.unlocked) {
+            swapSlotsData(fromSlot, toSlot);
+            playAtmosphericSound('click');
+        }
+    }
+
+    draggingSlotId = null;
+    hoverTargetSlotId = null;
+    highlightSelectedSlot(null);
+}
+
+function swapSlotsData(slotA, slotB) {
+    if (slotA.unitGroup) slotA.padMesh.remove(slotA.unitGroup);
+    if (slotB.unitGroup) slotB.padMesh.remove(slotB.unitGroup);
+
+    const tempType = slotA.unitType;
+    const tempLevel = slotA.level;
+    const tempSpent = slotA.totalSpent;
+    const tempCooldown = slotA.cooldown;
+    const tempGroup = slotA.unitGroup;
+
+    slotA.unitType = slotB.unitType;
+    slotA.level = slotB.level;
+    slotA.totalSpent = slotB.totalSpent;
+    slotA.cooldown = slotB.cooldown;
+    slotA.unitGroup = slotB.unitGroup;
+
+    slotB.unitType = tempType;
+    slotB.level = tempLevel;
+    slotB.totalSpent = tempSpent;
+    slotB.cooldown = tempCooldown;
+    slotB.unitGroup = tempGroup;
+
+    if (slotA.unitGroup) slotA.padMesh.add(slotA.unitGroup);
+    if (slotB.unitGroup) slotB.padMesh.add(slotB.unitGroup);
+
+    saveGameProgress();
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+    activeTouches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (activeTouches.size === 2) {
+        clearTimeout(holdTimer);
+        if (draggingSlotId !== null) finishDraggingUnit();
+        const pts = Array.from(activeTouches.values());
+        initialPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        initialPinchZoom = camZoom;
+        return;
+    }
+
+    isPointerDown = true;
+    prevX = e.clientX;
+    pointerDownPos = { x: e.clientX, y: e.clientY };
+
+    if (state.started) {
+        const hitSlotId = getSlotHitAt(e.clientX, e.clientY);
+        if (hitSlotId === 'sawmill') {
+            state.sawmillPulseTimer = 0.25;
+        } else if (hitSlotId !== null && state.slots[hitSlotId].unlocked && state.slots[hitSlotId].unitType) {
+            clearTimeout(holdTimer);
+            holdTimer = setTimeout(() => {
+                startDraggingUnit(hitSlotId, e.clientX, e.clientY);
+            }, 220);
+        }
+    }
+});
+
+window.addEventListener('pointermove', (e) => {
+    if (activeTouches.has(e.pointerId)) {
+        activeTouches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+
+    if (activeTouches.size === 2 && initialPinchDist) {
+        const pts = Array.from(activeTouches.values());
+        const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        const ratio = initialPinchDist / Math.max(10, dist);
+        camZoom = Math.max(0.85, Math.min(1.55, initialPinchZoom * ratio));
+        updateCameraPosition();
+        return;
+    }
+
+    if (!isPointerDown) {
+        if (state.started && e.pointerType === 'mouse') {
+            const hit = getSlotHitAt(e.clientX, e.clientY);
+            sawmillHovered = hit === 'sawmill';
+            canvas.classList.toggle('can-interact', hit !== null);
+        }
+        return;
+    }
+
+    if (draggingSlotId !== null) {
+        updateDragGhostPosition(e.clientX, e.clientY);
+        return;
+    }
+
+    const moveDist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+    if (moveDist > 8) {
+        clearTimeout(holdTimer);
+    }
+
+    const deltaX = e.clientX - prevX;
+    prevX = e.clientX;
+    camAngle -= deltaX * 0.008;
+    updateCameraPosition();
+});
+
+window.addEventListener('pointerup', (e) => {
+    activeTouches.delete(e.pointerId);
+    if (activeTouches.size < 2) {
+        initialPinchDist = null;
+    }
+
+    clearTimeout(holdTimer);
+
+    if (draggingSlotId !== null) {
+        finishDraggingUnit();
+        isPointerDown = false;
+        return;
+    }
+
+    if (!isPointerDown) return;
+    isPointerDown = false;
+
+    const moveDist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+    if (moveDist < 6 && state.started) {
+        handleCanvasTap(e.clientX, e.clientY);
+    }
+});
+
+window.addEventListener('pointercancel', (e) => {
+    activeTouches.delete(e.pointerId);
+    clearTimeout(holdTimer);
+    if (draggingSlotId !== null) finishDraggingUnit();
+    isPointerDown = false;
+});
+
+canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    camZoom = Math.max(0.85, Math.min(1.55, camZoom + e.deltaY * 0.0008));
+    updateCameraPosition();
+}, { passive: false });
+
+function handleCanvasTap(clientX, clientY) {
+    const slotId = getSlotHitAt(clientX, clientY);
+    if (slotId !== null) {
+        playAtmosphericSound('click');
+        openSlotModal(slotId);
+    } else {
+        closeSlotModal();
+        closeSawmillModal();
+    }
+}
+
+// ==========================================
+// 6. МЕНЮ УПРАВЛЕНИЯ ТОЧКОЙ (НАЙМ, ПРОКАЧКА, РАЗБЛОКИРОВКА)
+// ==========================================
+function getUpgradeCost(slot) {
+    if (!slot.unitType) return 0;
+    return Math.round(slot.unitType.upgBase * Math.pow(slot.unitType.upgMult, slot.level - 1));
+}
+
+function getSawmillMult() {
+    return 1 + state.sawmillLevel * 0.5;
+}
+function applySawmillToFence() {
+    const oldMax = state.maxHp;
+    state.maxHp = Math.round(100 * getSawmillMult());
+    state.hp = Math.min(state.maxHp, state.hp + Math.max(0, state.maxHp - oldMax));
+}
+
+function getSlotFireRate(slot) {
+    if (!slot.unitType) return 0;
+    return slot.unitType.fireRate + Math.max(0, slot.level - 1) * 0.05;
+}
+
+function getSlotDamage(slot) {
+    if (!slot.unitType || slot.level === 0) return 0;
+    return Math.floor(slot.unitType.baseDmg * (1 + (slot.level - 1) * 0.18));
+}
+
+function highlightSelectedSlot(id) {
+    state.slots.forEach(s => {
+        if (s.id === id) {
+            s.ringMesh.material.color.setHex(0xfbbf24);
+        } else if (s.unitType) {
+            s.ringMesh.material.color.setHex(0x4ade80);
+        } else {
+            s.ringMesh.material.color.setHex(s.unlocked ? 0x6ba383 : 0xd97706);
+        }
+    });
+}
+
+function openSlotModal(slotId) {
+    if (slotId === 'sawmill') { openSawmillModal(); return; }
+    selectedSlotId = slotId;
+    highlightSelectedSlot(slotId);
+
+    const slot = state.slots[slotId];
+    const modal = document.getElementById('slot-modal');
+    const hireList = document.getElementById('modal-hire-list');
+    const manageView = document.getElementById('modal-manage-view');
+    const unlockView = document.getElementById('modal-unlock-view');
+
+    document.getElementById('modal-slot-title').textContent = `${i18n[currentLang].slotTitle} #${slotId + 1}`;
+    modal.classList.remove('hidden');
+
+    hireList.classList.add('hidden');
+    manageView.classList.add('hidden');
+    manageView.classList.remove('flex');
+    unlockView.classList.add('hidden');
+    unlockView.classList.remove('flex');
+
+    if (!slot.unlocked) {
+        document.getElementById('modal-unit-name').textContent = i18n[currentLang].lockedSlot;
+        unlockView.classList.remove('hidden');
+        unlockView.classList.add('flex');
+
+        const canAfford = state.scrap >= slot.unlockCost;
+        document.getElementById('unlock-cost-label').textContent = `⚙️ ${slot.unlockCost}`;
+        const unlockBtn = document.getElementById('btn-unlock-slot');
+        unlockBtn.className = `w-full py-2 px-3 rounded-lg font-military text-xs transition flex items-center justify-center gap-2 ${
+            canAfford
+                ? 'bg-[#395e4a] hover:bg-[#47755c] text-white cursor-pointer shadow'
+                : 'bg-[#1c2621] text-[#55695e] cursor-not-allowed'
+        }`;
+        unlockBtn.onclick = () => unlockSlot(slotId);
+    } else if (!slot.unitType) {
+        document.getElementById('modal-unit-name').textContent = i18n[currentLang].emptySlot;
+        hireList.classList.remove('hidden');
+
+        hireList.innerHTML = '';
+        WEAPON_TYPES.forEach(w => {
+            const canAfford = state.scrap >= w.baseCost;
+            const btn = document.createElement('button');
+            btn.className = `px-2 py-1.5 rounded-lg border text-left transition flex justify-between items-center ${
+                canAfford 
+                    ? 'bg-[#18261f] hover:bg-[#22362c] border-[#375244] cursor-pointer' 
+                    : 'bg-[#121a16] border-[#212e27] opacity-55 cursor-not-allowed'
+            }`;
+            btn.innerHTML = `
+                <div>
+                    <div class="font-military text-[11px] text-[#e5f0ea]">${w.name}</div>
+                    <div class="text-[9px] font-semibold text-[#789183]">⚔️${w.baseDmg}${w.shotgun ? ' ×4' : ''} · ${w.range}m</div>
+                </div>
+                <span class="font-military text-[11px] ${canAfford ? 'text-amber-400' : 'text-[#5b7065]'}">⚙️${w.baseCost}</span>
+            `;
+            btn.onclick = () => hireUnitInSlot(slotId, w.typeId);
+            hireList.appendChild(btn);
+        });
+    } else {
+        const dmg = getSlotDamage(slot);
+        const upgCost = getUpgradeCost(slot);
+        const refund = Math.floor(slot.totalSpent * 0.7);
+        const canAfford = state.scrap >= upgCost;
+
+        document.getElementById('modal-unit-name').textContent = `${slot.unitType.name} (${i18n[currentLang].lvl} ${slot.level})`;
+        manageView.classList.remove('hidden');
+        manageView.classList.add('flex');
+
+        document.getElementById('manage-stats').textContent = `${dmg} DMG · ${getSlotFireRate(slot).toFixed(2)}/с`;
+        const nextDmg = Math.floor(slot.unitType.baseDmg * (1 + slot.level * 0.18));
+        const nextRate = getSlotFireRate(slot) + 0.05;
+        const dmgDelta = nextDmg - dmg;
+        const rateDelta = (nextRate - getSlotFireRate(slot)).toFixed(2);
+        document.getElementById('upgrade-preview').textContent = `+${dmgDelta} / +${rateDelta}`;
+        document.getElementById('manage-range').textContent = `${slot.unitType.range} м`;
+        document.getElementById('upgrade-cost-label').textContent = `⚙️ ${upgCost}`;
+        document.getElementById('dismiss-refund-label').textContent = `+⚙️ ${refund}`;
+
+        const upgBtn = document.getElementById('btn-upgrade-unit');
+        upgBtn.className = `py-1.5 px-2 rounded-lg font-military text-[10px] transition flex flex-col items-center justify-center ${
+            canAfford 
+                ? 'bg-[#395e4a] hover:bg-[#47755c] text-white cursor-pointer shadow' 
+                : 'bg-[#1c2621] text-[#55695e] cursor-not-allowed'
+        }`;
+        upgBtn.onclick = () => upgradeUnitInSlot(slotId);
+
+        document.getElementById('btn-dismiss-unit').onclick = () => dismissUnitInSlot(slotId);
+    }
+
+    updateSlotModalPosition();
+}
+
+function unlockSlot(slotId) {
+    const slot = state.slots[slotId];
+    if (!slot || slot.unlocked || state.scrap < slot.unlockCost) return;
+
+    state.scrap -= slot.unlockCost;
+    slot.unlocked = true;
+    if (slot.plusGroup) {
+        slot.plusGroup.visible = false;
+    }
+
+    saveGameProgress();
+    playAtmosphericSound('click');
+    updateHUD();
+    openSlotModal(slotId);
+}
+
+function updateSlotModalPosition() {
+    if (selectedSlotId === null || selectedSlotId === 'sawmill') return;
+    const slot = state.slots[selectedSlotId];
+    const modal = document.getElementById('slot-modal');
+    if (modal.classList.contains('hidden')) return;
+
+    const worldPos = new THREE.Vector3(slot.pos[0], 1.1, slot.pos[1]);
+    worldPos.project(camera);
+
+    const w = wrapper.clientWidth;
+    const h = wrapper.clientHeight;
+    const screenX = (worldPos.x * 0.5 + 0.5) * w;
+    const screenY = (-worldPos.y * 0.5 + 0.5) * h;
+
+    const modalW = modal.offsetWidth || 224;
+    const modalH = modal.offsetHeight || 160;
+
+    let left = screenX + 24;
+    if (left + modalW > w - 10) {
+        left = screenX - modalW - 24;
+    }
+    left = Math.max(10, Math.min(w - modalW - 10, left));
+
+    let top = screenY - modalH / 2;
+    top = Math.max(95, Math.min(h - modalH - 85, top));
+
+    modal.style.left = `${left}px`;
+    modal.style.top = `${top}px`;
+}
+
+function closeSlotModal() {
+    selectedSlotId = null;
+    highlightSelectedSlot(null);
+    document.getElementById('slot-modal').classList.add('hidden');
+}
+
+function hireUnitInSlot(slotId, weaponTypeId) {
+    const slot = state.slots[slotId];
+    const weaponCfg = WEAPON_TYPES[weaponTypeId];
+    if (!slot.unlocked || slot.unitType || state.scrap < weaponCfg.baseCost) return;
+
+    state.scrap -= weaponCfg.baseCost;
+    slot.unitType = weaponCfg;
+    slot.level = 1;
+    slot.totalSpent = weaponCfg.baseCost;
+    slot.cooldown = 0;
+
+    const mesh = createFighterMesh(weaponCfg);
+    slot.padMesh.add(mesh);
+    slot.unitGroup = mesh;
+
+    saveGameProgress();
+    playAtmosphericSound('click');
+    updateHUD();
+    openSlotModal(slotId);
+}
+
+function upgradeUnitInSlot(slotId) {
+    const slot = state.slots[slotId];
+    if (!slot.unitType) return;
+    const cost = getUpgradeCost(slot);
+    if (state.scrap < cost) return;
+
+    state.scrap -= cost;
+    slot.level += 1;
+    slot.totalSpent += cost;
+
+    const scale = 1 + Math.min(0.32, (slot.level - 1) * 0.02);
+    slot.unitGroup.scale.set(scale, scale, scale);
+
+    saveGameProgress();
+    playAtmosphericSound('click');
+    updateHUD();
+    openSlotModal(slotId);
+}
+
+function dismissUnitInSlot(slotId) {
+    const slot = state.slots[slotId];
+    if (!slot.unitType) return;
+
+    const refund = Math.floor(slot.totalSpent * 0.7);
+    state.scrap += refund;
+
+    if (slot.unitGroup) {
+        slot.padMesh.remove(slot.unitGroup);
+        slot.unitGroup = null;
+    }
+    slot.unitType = null;
+    slot.level = 0;
+    slot.totalSpent = 0;
+
+    saveGameProgress();
+    playAtmosphericSound('click');
+    updateHUD();
+    openSlotModal(slotId);
+}
+
+document.getElementById('btn-close-modal').addEventListener('click', () => {
+    playAtmosphericSound('click');
+    closeSlotModal();
+});
+
+function updateHUD() {
+    document.getElementById('scrap-val').textContent = state.scrap;
+    document.getElementById('hp-val').textContent = Math.max(0, Math.ceil(state.hp));
+    document.getElementById('wave-val').textContent = state.wave;
+    const sawmillModalEl = document.getElementById('sawmill-modal');
+    if (sawmillModalEl && !sawmillModalEl.classList.contains('hidden')) updateSawmillButtonState();
+    updateWaveProgressBar();
+}
+
+function updateWaveProgressBar() {
+    const bar = document.getElementById('wave-progress-bar');
+    if (!bar) return;
+    if (!state.inWave || state.waveTotalZombies <= 0) {
+        bar.style.width = '100%';
+        return;
+    }
+    const remaining = state.zombiesToSpawn + state.zombies.length;
+    const pct = Math.max(0, Math.min(100, (remaining / state.waveTotalZombies) * 100));
+    bar.style.width = `${pct}%`;
+}
+
+// ==========================================
+// 7. БОЕВАЯ СИСТЕМА, ВОЛНЫ И ЗОМБИ
+// ==========================================
+function startWave() {
+    if (state.inWave) return;
+    state.inWave = true;
+    const total = 10 + Math.floor(state.wave * 4.2);
+    state.waveTotalZombies = total;
+    state.zombiesToSpawn = total;
+    state.spawnTimer = 0.15;
+
+    const btn = document.getElementById('btn-battle');
+    btn.classList.add('opacity-50', 'pointer-events-none');
+    btn.innerHTML = `<span>⏳</span><span>${i18n[currentLang].inBattle}</span>`;
+    document.getElementById('wave-status').textContent = i18n[currentLang].combatPhase;
+    updateWaveProgressBar();
+
+    playAtmosphericSound('horn');
+}
+
+function createZombieMesh(bodyColor, clothesColor) {
+    const zombieGroup = new THREE.Group();
+
+    const skinMat = new THREE.MeshStandardMaterial({
+        color: bodyColor || 0x8bb57e,
+        emissive: 0x20301c,
+        roughness: 0.65,
+        flatShading: true
+    });
+    const clothesMat = new THREE.MeshStandardMaterial({
+        color: clothesColor || 0x627369,
+        emissive: 0x181f1b,
+        roughness: 0.75,
+        flatShading: true
+    });
+    const pantsMat = new THREE.MeshStandardMaterial({
+        color: 0x333c42,
+        emissive: 0x101417,
+        roughness: 0.85,
+        flatShading: true
+    });
+
+    const legGeo = new THREE.BoxGeometry(0.16, 0.46, 0.18);
+    const lLeg = new THREE.Mesh(legGeo, pantsMat);
+    lLeg.position.set(-0.12, 0.23, 0);
+    lLeg.castShadow = true;
+    const rLeg = new THREE.Mesh(legGeo, pantsMat);
+    rLeg.position.set(0.12, 0.23, 0);
+    rLeg.castShadow = true;
+    zombieGroup.add(lLeg, rLeg);
+
+    const torsoGeo = new THREE.BoxGeometry(0.46, 0.54, 0.28);
+    const torso = new THREE.Mesh(torsoGeo, clothesMat);
+    torso.position.set(0, 0.72, 0.03);
+    torso.rotation.x = 0.14;
+    torso.castShadow = true;
+    zombieGroup.add(torso);
+
+    const headGeo = new THREE.BoxGeometry(0.34, 0.34, 0.34);
+    const head = new THREE.Mesh(headGeo, skinMat);
+    head.position.set(0, 1.15, 0.09);
+    head.rotation.z = (Math.random() - 0.5) * 0.22;
+    head.castShadow = true;
+    zombieGroup.add(head);
+
+    const armGeo = new THREE.BoxGeometry(0.13, 0.13, 0.54);
+    const lArm = new THREE.Mesh(armGeo, skinMat);
+    lArm.position.set(-0.29, 0.86, 0.28);
+    lArm.rotation.x = -0.08;
+    lArm.castShadow = true;
+    const rArm = new THREE.Mesh(armGeo, skinMat);
+    rArm.position.set(0.29, 0.84, 0.26);
+    rArm.rotation.x = -0.18;
+    rArm.castShadow = true;
+    zombieGroup.add(lArm, rArm);
+
+    const hpBarGroup = new THREE.Group();
+    hpBarGroup.position.set(0, 1.56, 0);
+
+    const hpBgGeo = new THREE.PlaneGeometry(0.72, 0.11);
+    const hpBgMat = new THREE.MeshBasicMaterial({ color: 0x0f1412, side: THREE.DoubleSide });
+    const hpBg = new THREE.Mesh(hpBgGeo, hpBgMat);
+    hpBarGroup.add(hpBg);
+
+    const hpFillGeo = new THREE.PlaneGeometry(0.66, 0.07);
+    const hpFillMat = new THREE.MeshBasicMaterial({ color: 0x4ade80, side: THREE.DoubleSide });
+    const hpFill = new THREE.Mesh(hpFillGeo, hpFillMat);
+    hpFill.position.z = 0.01;
+    hpBarGroup.add(hpFill);
+
+    zombieGroup.add(hpBarGroup);
+
+    return { zombieGroup, hpBarGroup, hpFill };
+}
+
+function spawnZombie() {
+    const angle = Math.random() * Math.PI * 2;
+    const spawnDist = 21 + Math.random() * 4;
+    const x = Math.cos(angle) * spawnDist;
+    const z = Math.sin(angle) * spawnDist;
+
+    const roll = Math.random();
+    const kind = roll < 0.22 ? 'runner' : (roll < 0.40 ? 'brute' : 'normal');
+    let hpMult = 1, spMult = 1;
+    let bodyColor = 0x8bb57e, clothesColor = 0x627369;
+    if (kind === 'runner') { hpMult = 0.55; spMult = 1.6; bodyColor = 0x4e8f86; clothesColor = 0x2f6f6b; }
+    if (kind === 'brute') { hpMult = 1.7; spMult = 0.62; bodyColor = 0x9aa64e; clothesColor = 0x7d8a3e; }
+    const maxHp = Math.floor(32 * Math.pow(1.38, state.wave - 1) * hpMult);
+    const speed = (1.45 + Math.min(2.2, state.wave * 0.06) + (Math.random() * 0.3)) * spMult;
+
+    const { zombieGroup, hpBarGroup, hpFill } = createZombieMesh(bodyColor, clothesColor);
+    zombieGroup.position.set(x, 0, z);
+    zombieGroup.lookAt(0, 0, 0);
+    if (kind === 'runner') zombieGroup.scale.set(0.7, 0.95, 0.7);
+    if (kind === 'brute') zombieGroup.scale.set(1.3, 1.12, 1.3);
+    scene.add(zombieGroup);
+
+    state.zombies.push({
+        mesh: zombieGroup,
+        hpBarGroup,
+        hpFill,
+        hp: maxHp,
+        maxHp,
+        speed,
+        reward: (() => {
+            const w = state.wave;
+            const table = [0, 4, 15, 20, 30, 50, 75, 100];
+            const base = w === 1 ? 3 + Math.floor(Math.random() * 2) : (w <= 7 ? table[w] : Math.round(100 * Math.pow(1.32, w - 7)));
+            return Math.round(base * (kind === 'normal' ? 1 : 3));
+        })()
+    });
+}
+
+function shootBullet(slot, targetZombie) {
+    const startPos = new THREE.Vector3(slot.pos[0], 0.95, slot.pos[1]);
+    const targetPos = targetZombie.mesh.position.clone().add(new THREE.Vector3(0, 0.78, 0));
+
+    if (slot.unitGroup) {
+        slot.unitGroup.lookAt(targetPos.x, 0.16, targetPos.z);
+        let mw = null;
+        slot.unitGroup.traverse(o => { if (o.userData && o.userData.muzzle) mw = o.userData.muzzle; });
+        if (mw) {
+            mw.material.opacity = 0.95;
+            mw.scale.setScalar(1.6);
+            slot.muzzleMesh = mw;
+            slot.muzzleTimer = 0.06;
+        }
+    }
+
+    if (slot.unitType.shotgun) {
+        const dir = targetPos.clone().sub(startPos).setY(0).normalize();
+        const perp = new THREE.Vector3(-dir.z, 0, dir.x);
+        const candidates = state.zombies.filter(z => {
+            if (z === targetZombie) return false;
+            const to = z.mesh.position.clone().sub(startPos).setY(0);
+            const d = to.length();
+            if (d > slot.unitType.range) return false;
+            return to.normalize().dot(dir) > Math.cos(0.26);
+        }).sort((a, b) => a.mesh.position.distanceTo(startPos) - b.mesh.position.distanceTo(startPos));
+
+        const targets = [targetZombie, candidates[0] || targetZombie, candidates[1] || candidates[0] || targetZombie, candidates[2] || candidates[0] || targetZombie];
+        const offsets = [-0.1, -0.034, 0.034, 0.1];
+        const pelletDmg = getSlotDamage(slot);
+        targets.forEach((tz, i) => {
+            const bulletMesh = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6), new THREE.MeshBasicMaterial({ color: 0xfcd34d }));
+            bulletMesh.position.copy(startPos).addScaledVector(perp, offsets[i]);
+            scene.add(bulletMesh);
+            state.bullets.push({ mesh: bulletMesh, target: tz, dmg: pelletDmg, speed: 30 });
+        });
+        playShotgunBlast();
+        return;
+    }
+
+    const bulletGeo = new THREE.SphereGeometry(0.075, 6, 6);
+    const bulletMat = new THREE.MeshBasicMaterial({ color: 0xfcd34d });
+    const bulletMesh = new THREE.Mesh(bulletGeo, bulletMat);
+    bulletMesh.position.copy(startPos);
+    scene.add(bulletMesh);
+
+    state.bullets.push({
+        mesh: bulletMesh,
+        target: targetZombie,
+        dmg: getSlotDamage(slot),
+        speed: 34
+    });
+
+    playWeaponShot(slot.unitType.typeId);
+}
+
+function playShotgunBlast() {
+    fireSound('shotgun');
+}
+
+// ==========================================
+// 8. ГЛАВНЫЙ ИГРОВОЙ ЦИКЛ
+// ==========================================
+let lastTime = performance.now();
+
+function animate(now) {
+    requestAnimationFrame(animate);
+    const dt = Math.min(0.05, (now - lastTime) / 1000);
+    lastTime = now;
+
+    // Плавная пульсация плюсиков на закрытых платформах
+    const pulseScale = 1 + Math.sin(now * 0.005) * 0.16;
+    state.slots.forEach(s => {
+        if (!s.unlocked && s.plusGroup) {
+            s.plusGroup.scale.set(pulseScale, 1, pulseScale);
+            s.plusGroup.rotation.y = now * 0.0012;
+        }
+    });
+
+    // Оформление и пульсация лесопилки для наглядной кликабельности
+    if (state.sawmillPulseTimer > 0) {
+        state.sawmillPulseTimer = Math.max(0, state.sawmillPulseTimer - dt);
+    }
+    const sawWave = 0.5 + 0.5 * Math.sin(now * 0.0045);
+    const clickBoost = state.sawmillPulseTimer > 0 ? (state.sawmillPulseTimer / 0.25) * 0.14 : 0;
+    const hoverBoost = sawmillHovered ? 0.08 : 0;
+
+    if (state.sawmillMesh) {
+        const baseScale = 0.62 + clickBoost + hoverBoost;
+        state.sawmillMesh.scale.setScalar(baseScale);
+    }
+    if (state.sawmillRingMesh && state.sawmillRingMat) {
+        const ringPulse = 1 + sawWave * 0.12 + clickBoost + hoverBoost;
+        state.sawmillRingMesh.scale.set(0.85 * ringPulse, 1.15 * ringPulse, 1);
+        state.sawmillRingMat.opacity = sawmillHovered ? 1.0 : (0.55 + sawWave * 0.35);
+    }
+    if (state.sawmillBadgeGroup) {
+        state.sawmillBadgeGroup.position.y = 1.48 + Math.sin(now * 0.004) * 0.08;
+        state.sawmillBadgeGroup.lookAt(camera.position);
+    }
+    if (state.sawmillBladeMesh && state.sawmillLevel > 0) {
+        state.sawmillBladeMesh.rotation.y += dt * (1.8 + state.sawmillLevel * 0.6);
+    }
+
+    if (!state.started) {
+        camAngle += dt * 0.15;
+        updateCameraPosition();
+        renderer.render(scene, camera);
+        return;
+    }
+
+    if (selectedSlotId !== null) {
+        updateSlotModalPosition();
+    }
+    if (sawmillModalOpen) {
+        updateSawmillModalPosition();
+    }
+
+    if (state.inWave && state.zombiesToSpawn > 0) {
+        state.spawnTimer -= dt;
+        if (state.spawnTimer <= 0) {
+            spawnZombie();
+            state.zombiesToSpawn--;
+            state.spawnTimer = Math.max(0.22, 0.95 - state.wave * 0.04);
+        }
+    }
+
+    for (let i = state.zombies.length - 1; i >= 0; i--) {
+        const z = state.zombies[i];
+        const dir = new THREE.Vector3(-z.mesh.position.x, 0, -z.mesh.position.z);
+
+        z.mesh.lookAt(0, 0, 0);
+        z.mesh.position.y = Math.abs(Math.sin(now * 0.008 + i)) * 0.08;
+        z.hpBarGroup.lookAt(camera.position);
+
+        const atFenceX = Math.abs(z.mesh.position.x) <= 4.75;
+        const atFenceZ = Math.abs(z.mesh.position.z) <= 4.75;
+
+        if (!(atFenceX && atFenceZ)) {
+            dir.normalize();
+            z.mesh.position.addScaledVector(dir, z.speed * dt);
+            for (let k = 0; k < OBSTACLES.length; k++) {
+                const ob = OBSTACLES[k];
+                const dx = z.mesh.position.x - ob.x;
+                const dz = z.mesh.position.z - ob.z;
+                const d = Math.hypot(dx, dz);
+                const minD = ob.r + 0.32;
+                if (d < minD && d > 0.001) {
+                    const push = (minD - d) / d;
+                    z.mesh.position.x += dx * push;
+                    z.mesh.position.z += dz * push;
+                }
+            }
+        } else {
+            state.hp -= (7 + state.wave * 0.5) * dt;
+            updateHUD();
+            if (state.hp <= 0) {
+                triggerPerimeterBreach();
+                return;
+            }
+        }
+    }
+
+    state.slots.forEach(slot => {
+        if (!slot.unitType || slot.level <= 0 || slot.id === draggingSlotId) return;
+        slot.cooldown -= dt;
+
+        if (slot.muzzleMesh) {
+            slot.muzzleTimer -= dt;
+            const k = Math.max(0, slot.muzzleTimer / 0.06);
+            slot.muzzleMesh.material.opacity = k;
+            slot.muzzleMesh.scale.setScalar(0.8 + k * 0.9);
+            if (slot.muzzleTimer <= 0) slot.muzzleMesh = null;
+        }
+
+        if (slot.cooldown <= 0 && state.zombies.length > 0) {
+            let nearest = null;
+            let minDist = slot.unitType.range;
+
+            state.zombies.forEach(z => {
+                const dx = z.mesh.position.x - slot.pos[0];
+                const dz = z.mesh.position.z - slot.pos[1];
+                const d = Math.hypot(dx, dz);
+                if (d <= minDist) {
+                    minDist = d;
+                    nearest = z;
+                }
+            });
+
+            if (nearest) {
+                shootBullet(slot, nearest);
+                slot.cooldown = 1 / getSlotFireRate(slot);
+            }
+        }
+    });
+
+    for (let i = state.bullets.length - 1; i >= 0; i--) {
+        const b = state.bullets[i];
+        const targetPos = b.target.mesh.position.clone().add(new THREE.Vector3(0, 0.78, 0));
+        const dir = targetPos.sub(b.mesh.position);
+        const dist = dir.length();
+
+        if (dist < 0.45 || b.target.hp <= 0) {
+            if (b.target.hp > 0) {
+                b.target.hp -= b.dmg;
+                const hpRatio = Math.max(0, b.target.hp / b.target.maxHp);
+                b.target.hpFill.scale.x = hpRatio;
+                b.target.hpFill.position.x = -(1 - hpRatio) * 0.33;
+
+                if (b.target.hp <= 0) {
+                    const idx = state.zombies.indexOf(b.target);
+                    if (idx !== -1) {
+                        scene.remove(b.target.mesh);
+                        state.zombies.splice(idx, 1);
+                        state.scrap += b.target.reward;
+                        saveGameProgress();
+                        updateHUD();
+                        if (selectedSlotId !== null) openSlotModal(selectedSlotId);
+                        playAtmosphericSound('zombieHit');
+                    }
+                }
+            }
+            scene.remove(b.mesh);
+            state.bullets.splice(i, 1);
+        } else {
+            dir.normalize();
+            b.mesh.position.addScaledVector(dir, b.speed * dt);
+        }
+    }
+
+    if (state.inWave && state.zombiesToSpawn === 0 && state.zombies.length === 0) {
+        state.inWave = false;
+        state.wave += 1;
+        state.scrap += Math.round((12 + state.wave * 3) * 0.6 * Math.pow(1.32, state.wave - 1));
+        saveGameProgress();
+        updateHUD();
+        if (selectedSlotId !== null) openSlotModal(selectedSlotId);
+
+        const btn = document.getElementById('btn-battle');
+        btn.classList.remove('opacity-50', 'pointer-events-none');
+        btn.innerHTML = `<span>⚔️</span><span data-i18n="battle">${i18n[currentLang].battle}</span>`;
+        document.getElementById('wave-status').textContent = i18n[currentLang].prepPhase;
+        playAtmosphericSound('click');
+    }
+
+    renderer.render(scene, camera);
+}
+
+function triggerPerimeterBreach() {
+    state.inWave = false;
+    state.zombiesToSpawn = 0;
+
+    state.zombies.forEach(z => scene.remove(z.mesh));
+    state.bullets.forEach(b => scene.remove(b.mesh));
+    state.zombies = [];
+    state.bullets = [];
+
+    saveGameProgress();
+    closeSlotModal();
+    document.getElementById('gameover-modal').classList.remove('hidden');
+    playAtmosphericSound('horn');
+}
+
+// ==========================================
+// 9. ОБРАБОТЧИКИ КНОПОК ИНТЕРФЕЙСА И НАСТРОЕК
+// ==========================================
+const settingsDropdown = document.getElementById('settings-dropdown');
+
+document.getElementById('btn-settings').addEventListener('click', (e) => {
+    e.stopPropagation();
+    playAtmosphericSound('click');
+    settingsDropdown.classList.toggle('hidden');
+});
+
+window.addEventListener('pointerdown', (e) => {
+    if (!settingsDropdown.classList.contains('hidden') && !e.target.closest('#settings-dropdown') && !e.target.closest('#btn-settings')) {
+        settingsDropdown.classList.add('hidden');
+    }
+});
+
+document.getElementById('btn-start').addEventListener('click', () => {
+    state.started = true;
+    document.getElementById('main-menu').classList.add('hidden');
+    document.getElementById('hud-stats').classList.remove('hidden');
+    document.getElementById('hud-stats').classList.add('flex');
+    document.getElementById('game-ui').classList.remove('hidden');
+    document.getElementById('btn-open-wipe').classList.remove('hidden');
+    updateHUD();
+    playAtmosphericSound('click');
+});
+
+document.getElementById('btn-battle').addEventListener('click', startWave);
+
+document.getElementById('btn-lang').addEventListener('click', () => {
+    currentLang = currentLang === 'ru' ? 'en' : 'ru';
+    playAtmosphericSound('click');
+    updateLanguage();
+});
+
+document.getElementById('btn-sound').addEventListener('click', () => {
+    soundEnabled = !soundEnabled;
+    document.getElementById('sound-icon').textContent = soundEnabled ? '🔊' : '🔇';
+    if (soundEnabled) playAtmosphericSound('click');
+});
+
+document.getElementById('btn-retry-wave').addEventListener('click', () => {
+    state.hp = state.maxHp;
+    state.inWave = false;
+    state.zombiesToSpawn = 0;
+
+    document.getElementById('gameover-modal').classList.add('hidden');
+    const btn = document.getElementById('btn-battle');
+    btn.classList.remove('opacity-50', 'pointer-events-none');
+    btn.innerHTML = `<span>⚔️</span><span data-i18n="battle">${i18n[currentLang].battle}</span>`;
+    document.getElementById('wave-status').textContent = i18n[currentLang].prepPhase;
+
+    updateHUD();
+    playAtmosphericSound('click');
+});
+
+document.getElementById('btn-open-wipe').addEventListener('click', () => {
+    playAtmosphericSound('click');
+    settingsDropdown.classList.add('hidden');
+    document.getElementById('wipe-modal').classList.remove('hidden');
+});
+
+document.getElementById('btn-cancel-wipe').addEventListener('click', () => {
+    playAtmosphericSound('click');
+    document.getElementById('wipe-modal').classList.add('hidden');
+});
+
+document.getElementById('btn-confirm-wipe').addEventListener('click', () => {
+    localStorage.removeItem(STORAGE_KEY);
+
+    state.zombies.forEach(z => scene.remove(z.mesh));
+    state.bullets.forEach(b => scene.remove(b.mesh));
+    state.zombies = [];
+    state.bullets = [];
+    state.zombiesToSpawn = 0;
+    state.wave = 1;
+    state.scrap = 60;
+    state.sawmillLevel = 0;
+    refreshSawmillVisuals();
+    state.hp = 100;
+    state.maxHp = 100;
+    state.inWave = false;
+
+    state.slots.forEach((s, idx) => {
+        if (s.unitGroup) {
+            s.padMesh.remove(s.unitGroup);
+            s.unitGroup = null;
+        }
+        s.unitType = null;
+        s.level = 0;
+        s.totalSpent = 0;
+        s.unlocked = idx < 2;
+        if (s.plusGroup) s.plusGroup.visible = !s.unlocked;
+        s.ringMesh.material.color.setHex(s.unlocked ? 0x6ba383 : 0xd97706);
+    });
+
+    closeSlotModal();
+    document.getElementById('wipe-modal').classList.add('hidden');
+    document.getElementById('gameover-modal').classList.add('hidden');
+
+    const btn = document.getElementById('btn-battle');
+    btn.classList.remove('opacity-50', 'pointer-events-none');
+    btn.innerHTML = `<span>⚔️</span><span data-i18n="battle">${i18n[currentLang].battle}</span>`;
+    document.getElementById('wave-status').textContent = i18n[currentLang].prepPhase;
+
+    saveGameProgress();
+    updateHUD();
+    playAtmosphericSound('click');
+});
+
+// ===== ЛЕСОПИЛКА =====
+const SAWMILL_PRICES = [100, 200, 300, 350, 450, 600, 800, 1050];
+function getSawmillNextCost() {
+    const lvl = state.sawmillLevel;
+    return lvl < SAWMILL_PRICES.length ? SAWMILL_PRICES[lvl] : Math.round(SAWMILL_PRICES[7] * Math.pow(1.35, lvl - 7));
+}
+function updateSawmillButtonState() {
+    const cost = getSawmillNextCost();
+    document.getElementById('sawmill-cost-label').textContent = `⚙️ ${cost}`;
+    const btn = document.getElementById('btn-upgrade-sawmill');
+    const canAfford = state.scrap >= cost;
+    btn.className = `w-full py-2 px-3 rounded-lg font-military text-xs transition flex flex-col items-center justify-center ${canAfford ? 'bg-[#395e4a] hover:bg-[#47755c] text-white cursor-pointer shadow' : 'bg-[#1c2621] text-[#55695e] cursor-not-allowed'}`;
+    btn.onclick = () => upgradeSawmill();
+}
+
+function updateSawmillModalPosition() {
+    if (!sawmillModalOpen) return;
+    const modal = document.getElementById('sawmill-modal');
+    if (modal.classList.contains('hidden') || !state.sawmillHitMesh) return;
+
+    const worldPos = new THREE.Vector3(state.sawmillHitMesh.position.x, 1.15, state.sawmillHitMesh.position.z);
+    worldPos.project(camera);
+
+    const w = wrapper.clientWidth;
+    const h = wrapper.clientHeight;
+    const screenX = (worldPos.x * 0.5 + 0.5) * w;
+    const screenY = (-worldPos.y * 0.5 + 0.5) * h;
+
+    const modalW = modal.offsetWidth || 224;
+    const modalH = modal.offsetHeight || 170;
+
+    let left = screenX + 24;
+    if (left + modalW > w - 10) {
+        left = screenX - modalW - 24;
+    }
+    left = Math.max(10, Math.min(w - modalW - 10, left));
+
+    let top = screenY - modalH / 2;
+    top = Math.max(95, Math.min(h - modalH - 85, top));
+
+    modal.style.left = `${left}px`;
+    modal.style.top = `${top}px`;
+}
+
+function closeSawmillModal() {
+    sawmillModalOpen = false;
+    document.getElementById('sawmill-modal').classList.add('hidden');
+}
+
+function openSawmillModal() {
+    closeSlotModal();
+    sawmillModalOpen = true;
+    const m = document.getElementById('sawmill-modal');
+    m.classList.remove('hidden');
+    document.getElementById('sawmill-lvl-val').textContent = state.sawmillLevel;
+    document.getElementById('sawmill-defense-val').textContent = `${Math.round(getSawmillMult() * 100)}%`;
+    document.getElementById('sawmill-upg-label').textContent = state.sawmillLevel === 0 ? 'ПОСТРОИТЬ' : 'УЛУЧШИТЬ';
+    const nextFence = Math.round((1 + (state.sawmillLevel + 1) * 0.5) * 100);
+    document.getElementById('sawmill-preview').textContent = `→ ${nextFence}%`;
+    updateSawmillButtonState();
+    updateSawmillModalPosition();
+}
+function upgradeSawmill() {
+    const cost = getSawmillNextCost();
+    if (state.scrap < cost) return;
+    state.scrap -= cost;
+    state.sawmillLevel += 1;
+    state.sawmillPulseTimer = 0.35;
+    applySawmillToFence();
+    refreshSawmillVisuals();
+    saveGameProgress();
+    updateHUD();
+    playAtmosphericSound('click');
+    openSawmillModal();
+}
+document.getElementById('btn-close-sawmill').addEventListener('click', () => {
+    playAtmosphericSound('click');
+    closeSawmillModal();
+});
+
+window.addEventListener('resize', () => {
+    camera.aspect = wrapper.clientWidth / wrapper.clientHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(wrapper.clientWidth, wrapper.clientHeight);
+});
+
+updateLanguage();
+requestAnimationFrame(animate);
+</script>
+
+<!-- ═══════ ОКНО «ЧТО НОВОГО» ═══════ -->
+<div id="whatsnew-overlay" class="hidden fixed inset-0 z-[60] flex items-center justify-center p-4" style="background: rgba(6,10,8,0.45); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);">
+    <div class="relative w-full max-w-sm bg-[#111915]/95 border border-[#3b5246] rounded-2xl p-5 shadow-2xl max-h-[70vh] overflow-y-auto">
+        <button id="btn-close-whatsnew" class="absolute top-2 right-3 text-[#7d957f] hover:text-white text-xl leading-none cursor-pointer">✕</button>
+        <h2 class="font-military text-lg text-amber-300 mb-3">📋 ЧТО НОВОГО</h2>
+        <div class="text-xs text-[#c9d8ce] font-tactical space-y-2 leading-relaxed">
+            <p class="font-military text-amber-300 mb-1">PILOT 1.3.1</p>
+            <ul class="list-disc pl-4 space-y-1">
+                <li>Ребаланс экономики: награда за зомби растёт вместе с волной (3-4 на первой, далее 15/20/30/50/75/100, потом x1.32 за волну). Бегуны и жирдяи приносят x3 от награды обычного. Бонус за зачистку волны тоже масштабируется. Здоровье зомби теперь растёт x1.38 за волну — сложность догоняет доход.</li>
+                <li>Оружие: базовый урон AWP повышен до 1000, XM-1014 — до 80 за дробину (320 за залп в упор).</li>
+            </ul>
+            <p class="font-military text-amber-300 mb-1">PILOT 1.3</p>
+            <ul class="list-disc pl-4 space-y-1">
+                <li>Внесенные изменения: добавлена функция масштабирования камеры. Исправлены ошибки. Добавлена возможность смены взаимного расположения бойцов (удерживайте бойца, затем переместите в другое доступное место). Добавлена полоса окончания волны. Внесены изменения в систему покупки бойцов. Снижены цены на улучшения бойцов.</li>
+                <li>Новое оружие: XM-1014 — дробовик со залпом из 4 дробин узким треугольником.</li>
+                <li>Оружия получили детальные модели и вспышки у дула.</li>
+                <li>Каждое улучшение оружия добавляет +0.05 к скорострельности (зелёное превью в кнопке УЛУЧШИТЬ).</li>
+                <li>На карте появились деревья, трава и лужи. Зомби больше не проходят сквозь камни и деревья.</li>
+                <li>Возле палатки появилась лесопилка: улучшайте её, чтобы укреплять забор — прочность растёт с 100% до 150%, 200% и дальше. При улучшении забор полностью восстанавливается.</li>
+            </ul>
+        </div>
+        <div id="whatsnew-version" class="mt-4 text-[10px] text-white/40 font-military">PILOT 1.3</div>
+    </div>
+</div>
+
+<script>
+const GAME_VERSION = "PILOT 1.3";
+(function() {
+    const vEl = document.getElementById('whatsnew-version');
+    if (vEl) vEl.textContent = GAME_VERSION;
+    const overlay = document.getElementById('whatsnew-overlay');
+    document.getElementById('btn-whats-new').addEventListener('click', (e) => {
+        e.stopPropagation();
+        playAtmosphericSound('click');
+        settingsDropdown.classList.add('hidden');
+        overlay.classList.remove('hidden');
+    });
+    function closeWhatsNew() { overlay.classList.add('hidden'); }
+    document.getElementById('btn-close-whatsnew').addEventListener('click', closeWhatsNew);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeWhatsNew(); });
+    window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !overlay.classList.contains('hidden')) closeWhatsNew(); });
+
+    async function checkForUpdate() {
+        try {
+            const res = await fetch(location.href.split("?")[0], { cache: "no-store" });
+            const text = await res.text();
+            const m = text.match(/const GAME_VERSION = "([^"]+)"/);
+            if (m && m[1] !== GAME_VERSION) {
+                const banner = document.getElementById('update-banner');
+                if (banner) banner.style.display = 'flex';
+            }
+        } catch (e) {}
+    }
+    checkForUpdate();
+    setInterval(checkForUpdate, 5 * 60 * 1000);
+})();
+</script>
+
+<div id="update-banner" style="display:none; position:fixed; top: calc(0.75rem + env(safe-area-inset-top)); left:50%; transform:translateX(-50%); z-index:9997; background:#1e2b1e; border:1px solid #7a9a4a; color:#e8f0d8; padding:8px 14px; border-radius:10px; font-size:13px; align-items:center; gap:10px; box-shadow:0 4px 16px rgba(0,0,0,0.5);">
+    <span>Доступно обновление</span>
+    <button id="update-now-btn" style="background:#7a9a4a; color:#10180d; border:none; border-radius:8px; padding:4px 12px; cursor:pointer; font-weight:bold;">ОБНОВИТЬ 🔄</button>
+</div>
+<script>
+document.getElementById('update-now-btn').addEventListener('click', () => {
+    location.replace(location.href.split("?")[0] + "?v=" + Date.now());
+});
+</script>
+</body>
+</html>
