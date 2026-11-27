@@ -853,8 +853,6 @@ const WEAPON_TYPES = [
     { typeId: 5, name: "SSG-08",   baseCost: 400000, upgBase: 770, upgMult: 1.14,  baseDmg: 125,  fireRate: 0.80, range: 31, color: 0x455d6b },
     { typeId: 6, name: "AWP",      baseCost: 1150000, upgBase: 1800, upgMult: 1.13,  baseDmg: 1000, fireRate: 0.45, range: 38, color: 0x3b5737 },
     { typeId: 7, name: "XM-1014",  baseCost: 450000,  upgBase: 900,  upgMult: 1.12,  baseDmg: 80,   fireRate: 0.85, range: 8,  color: 0x3c4a52, shotgun: true },
-    // Desert Eagle: между USP-S и MP5-SD. Урон за выстрел ×2.5 от USP, но темп в 1.7 раза ниже; DPS ниже MP5-SD.
-    // typeId 8 добавлен В КОНЕЦ массива, чтобы старые сохранения не сломались.
     { typeId: 8, name: "Desert Eagle", baseCost: 6500, upgBase: 70, upgMult: 1.112, baseDmg: 30, fireRate: 0.65, range: 18, color: 0x8d8f86 }
 ];
 
@@ -1034,6 +1032,21 @@ function scheduleCloudSave() {
     clearTimeout(cloudSyncTimer);
     cloudSyncTimer = setTimeout(syncCloudSaveNow, 450);
 }
+
+// Отложенная запись прогресса: localStorage — синхронная операция, запись на
+// каждое убийство (а на поздних волнах их десятки в секунду) тормозила кадры.
+let saveProgressTimer = null;
+function saveProgressSoon() {
+    if (saveProgressTimer) return;
+    saveProgressTimer = setTimeout(() => {
+        saveProgressTimer = null;
+        saveGameProgress();
+    }, 3000);
+}
+
+// Флаг "HUD устарел": вместо десятков updateHUD() за кадр — одно обновление раз в 0.25 с
+let hudDirty = false;
+let hudTimer = 0;
 
 function saveGameProgress() {
     try {
@@ -2356,7 +2369,11 @@ function updateWaveProgressBar() {
 function startWave() {
     if (state.inWave) return;
     state.inWave = true;
-    const total = 10 + Math.floor(state.wave * 4.2);
+    const rawTotal = 10 + Math.floor(state.wave * 4.2);
+    // Потолок живых зомби: выше ~78-й волны не растёт количество, а растёт "плотность"
+    // (каждый зомби жирнее и щедрее), чтобы волна не растягивалась и FPS не падал.
+    const total = Math.min(rawTotal, 140);
+    state.zombieDensity = rawTotal / total;
     const hasBoss = isBossWave(state.wave);
     state.bossPending = hasBoss;
     state.bossSpawned = false;
@@ -2374,29 +2391,46 @@ function startWave() {
     playAtmosphericSound('horn');
 }
 
+// Общий кэш геометрий и материалов: создаются один раз и переиспользуются всеми
+// зомби. Без кэша каждый зомби уносил с собой ~9 геометрий и 4 материала, которые
+// не выгружались из видеопамяти при scene.remove() — утечка и фризы на поздних волнах.
+const ZCACHE = { geos: {}, mats: {} };
+function zGeo(key, make) {
+    if (!ZCACHE.geos[key]) ZCACHE.geos[key] = make();
+    return ZCACHE.geos[key];
+}
+function zMat(key, make) {
+    if (!ZCACHE.mats[key]) ZCACHE.mats[key] = make();
+    return ZCACHE.mats[key];
+}
+
+const BULLET_GEO = new THREE.SphereGeometry(0.075, 6, 6);
+const PELLET_GEO = new THREE.SphereGeometry(0.04, 6, 6);
+const BULLET_MAT = new THREE.MeshBasicMaterial({ color: 0xfcd34d });
+
 function createZombieMesh(bodyColor, clothesColor) {
     const zombieGroup = new THREE.Group();
 
-    const skinMat = new THREE.MeshStandardMaterial({
+    const skinMat = zMat('skin_' + (bodyColor || 0x8bb57e), () => new THREE.MeshStandardMaterial({
         color: bodyColor || 0x8bb57e,
         emissive: 0x20301c,
         roughness: 0.65,
         flatShading: true
-    });
-    const clothesMat = new THREE.MeshStandardMaterial({
+    }));
+    const clothesMat = zMat('clothes_' + (clothesColor || 0x627369), () => new THREE.MeshStandardMaterial({
         color: clothesColor || 0x627369,
         emissive: 0x181f1b,
         roughness: 0.75,
         flatShading: true
-    });
-    const pantsMat = new THREE.MeshStandardMaterial({
+    }));
+    const pantsMat = zMat('pants', () => new THREE.MeshStandardMaterial({
         color: 0x333c42,
         emissive: 0x101417,
         roughness: 0.85,
         flatShading: true
-    });
+    }));
 
-    const legGeo = new THREE.BoxGeometry(0.16, 0.46, 0.18);
+    const legGeo = zGeo('leg', () => new THREE.BoxGeometry(0.16, 0.46, 0.18));
     const lLeg = new THREE.Mesh(legGeo, pantsMat);
     lLeg.position.set(-0.12, 0.23, 0);
     lLeg.castShadow = true;
@@ -2405,21 +2439,21 @@ function createZombieMesh(bodyColor, clothesColor) {
     rLeg.castShadow = true;
     zombieGroup.add(lLeg, rLeg);
 
-    const torsoGeo = new THREE.BoxGeometry(0.46, 0.54, 0.28);
+    const torsoGeo = zGeo('torso', () => new THREE.BoxGeometry(0.46, 0.54, 0.28));
     const torso = new THREE.Mesh(torsoGeo, clothesMat);
     torso.position.set(0, 0.72, 0.03);
     torso.rotation.x = 0.14;
     torso.castShadow = true;
     zombieGroup.add(torso);
 
-    const headGeo = new THREE.BoxGeometry(0.34, 0.34, 0.34);
+    const headGeo = zGeo('head', () => new THREE.BoxGeometry(0.34, 0.34, 0.34));
     const head = new THREE.Mesh(headGeo, skinMat);
     head.position.set(0, 1.15, 0.09);
     head.rotation.z = (Math.random() - 0.5) * 0.22;
     head.castShadow = true;
     zombieGroup.add(head);
 
-    const armGeo = new THREE.BoxGeometry(0.13, 0.13, 0.54);
+    const armGeo = zGeo('arm', () => new THREE.BoxGeometry(0.13, 0.13, 0.54));
     const lArm = new THREE.Mesh(armGeo, skinMat);
     lArm.position.set(-0.29, 0.86, 0.28);
     lArm.rotation.x = -0.08;
@@ -2433,13 +2467,13 @@ function createZombieMesh(bodyColor, clothesColor) {
     const hpBarGroup = new THREE.Group();
     hpBarGroup.position.set(0, 1.56, 0);
 
-    const hpBgGeo = new THREE.PlaneGeometry(0.72, 0.11);
-    const hpBgMat = new THREE.MeshBasicMaterial({ color: 0x0f1412, side: THREE.DoubleSide });
+    const hpBgGeo = zGeo('hpBg', () => new THREE.PlaneGeometry(0.72, 0.11));
+    const hpBgMat = zMat('hpBg', () => new THREE.MeshBasicMaterial({ color: 0x0f1412, side: THREE.DoubleSide }));
     const hpBg = new THREE.Mesh(hpBgGeo, hpBgMat);
     hpBarGroup.add(hpBg);
 
-    const hpFillGeo = new THREE.PlaneGeometry(0.66, 0.07);
-    const hpFillMat = new THREE.MeshBasicMaterial({ color: 0x4ade80, side: THREE.DoubleSide });
+    const hpFillGeo = zGeo('hpFill', () => new THREE.PlaneGeometry(0.66, 0.07));
+    const hpFillMat = zMat('hpFillGreen', () => new THREE.MeshBasicMaterial({ color: 0x4ade80, side: THREE.DoubleSide }));
     const hpFill = new THREE.Mesh(hpFillGeo, hpFillMat);
     hpFill.position.z = 0.01;
     hpBarGroup.add(hpFill);
@@ -2462,7 +2496,8 @@ function spawnZombie() {
     let bodyColor = 0x8bb57e, clothesColor = 0x627369;
     if (kind === 'runner') { hpMult = 0.55; spMult = 1.6; bodyColor = 0x4e8f86; clothesColor = 0x2f6f6b; }
     if (kind === 'brute') { hpMult = 1.7; spMult = 0.62; bodyColor = 0x9aa64e; clothesColor = 0x7d8a3e; }
-    const maxHp = Math.floor(32 * (1 + (state.wave - 1) * 0.13) * hpMult);
+    const dens = state.zombieDensity || 1;
+    const maxHp = Math.floor(32 * (1 + (state.wave - 1) * 0.13) * hpMult * dens);
     const speed = (1.45 + Math.min(2.2, state.wave * 0.06) + (Math.random() * 0.3)) * spMult;
 
     const { zombieGroup, hpBarGroup, hpFill } = createZombieMesh(bodyColor, clothesColor);
@@ -2482,7 +2517,7 @@ function spawnZombie() {
         reward: (() => {
             const w = state.wave;
             const base = 2 + w * 0.09;
-            return Math.max(2, Math.round(base * (kind === 'normal' ? 1 : 3)));
+            return Math.max(2, Math.round(base * dens * (kind === 'normal' ? 1 : 3)));
         })()
     });
 }
@@ -2524,7 +2559,9 @@ function createBossMesh() {
         g.add(fist);
     });
 
-    parts.hpFill.material.color.setHex(0xf97316);
+    // У босса оранжевая полоска HP: материал общий и кэширован, поэтому боссу
+    // выдаём персональную копию, чтобы не перекрасить полоски всех зомби.
+    parts.hpFill.material = new THREE.MeshBasicMaterial({ color: 0xf97316, side: THREE.DoubleSide });
     applyShadows(g);
     return parts;
 }
@@ -2599,7 +2636,7 @@ function shootBullet(slot, targetZombie) {
         const offsets = [-0.1, -0.034, 0.034, 0.1];
         const pelletDmg = getSlotDamage(slot);
         targets.forEach((tz, i) => {
-            const bulletMesh = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6), new THREE.MeshBasicMaterial({ color: 0xfcd34d }));
+            const bulletMesh = new THREE.Mesh(PELLET_GEO, BULLET_MAT);
             bulletMesh.position.copy(startPos).addScaledVector(perp, offsets[i]);
             scene.add(bulletMesh);
             state.bullets.push({ mesh: bulletMesh, target: tz, dmg: pelletDmg, speed: 30 });
@@ -2608,9 +2645,7 @@ function shootBullet(slot, targetZombie) {
         return;
     }
 
-    const bulletGeo = new THREE.SphereGeometry(0.075, 6, 6);
-    const bulletMat = new THREE.MeshBasicMaterial({ color: 0xfcd34d });
-    const bulletMesh = new THREE.Mesh(bulletGeo, bulletMat);
+    const bulletMesh = new THREE.Mesh(BULLET_GEO, BULLET_MAT);
     bulletMesh.position.copy(startPos);
     scene.add(bulletMesh);
 
@@ -2757,10 +2792,13 @@ function animate(now) {
 
     if (state.inWave && state.zombiesToSpawn > 0) {
         state.spawnTimer -= dt;
-        if (state.spawnTimer <= 0) {
+        // Если кадр просел (dt упёрся в кламп), догоняем спавн пачкой до 3 за кадр
+        let burst = 0;
+        while (state.spawnTimer <= 0 && state.zombiesToSpawn > 0 && burst < 3) {
             spawnZombie();
             state.zombiesToSpawn--;
-            state.spawnTimer = Math.max(0.22, 0.95 - state.wave * 0.04);
+            state.spawnTimer += Math.max(0.22, 0.95 - state.wave * 0.04);
+            burst++;
         }
     }
 
@@ -2805,7 +2843,7 @@ function animate(now) {
             }
         } else {
             state.hp -= (7 + state.wave * 0.5) * (z.dmgMult || 1) * dt;
-            updateHUD();
+            hudDirty = true;
             if (state.hp <= 0) {
                 triggerPerimeterBreach();
                 return;
@@ -2865,9 +2903,8 @@ function animate(now) {
                         scene.remove(b.target.mesh);
                         state.zombies.splice(idx, 1);
                         state.scrap += b.target.reward;
-                        saveGameProgress();
-                        updateHUD();
-                        if (selectedSlotId !== null) openSlotModal(selectedSlotId);
+                        hudDirty = true;
+                        saveProgressSoon();
                         playAtmosphericSound('zombieHit');
                     }
                 }
@@ -2885,8 +2922,8 @@ function animate(now) {
         state.bossSpawned = false;
         state.wave += 1;
         state.scrap += Math.round(10 + state.wave * 2.5 + state.wave * state.wave * 0.08);
-        saveGameProgress();
-        updateHUD();
+        saveProgressSoon();
+        hudDirty = true;
         if (selectedSlotId !== null) openSlotModal(selectedSlotId);
 
         const btn = document.getElementById('btn-battle');
@@ -2894,6 +2931,20 @@ function animate(now) {
         btn.innerHTML = `<span>⚔️</span><span data-i18n="battle">${i18n[currentLang].battle}</span>`;
         updateWaveStatus();
         playAtmosphericSound('click');
+    }
+
+    // Обновляем HUD и открытую модалку не чаще 4 раз в секунду
+    hudTimer -= dt;
+    if (hudTimer <= 0) {
+        hudTimer = 0.25;
+        if (hudDirty) {
+            hudDirty = false;
+            updateHUD();
+        }
+        if (selectedSlotId !== null) {
+            const modal = document.getElementById('slot-modal');
+            if (modal && !modal.classList.contains('hidden')) openSlotModal(selectedSlotId);
+        }
     }
 
     renderer.render(scene, camera);
